@@ -409,10 +409,9 @@ jobs:
           # override default build-tools version (29.0.3) -- optional
           BUILD_TOOLS_VERSION: "30.0.2"
 
-      - name: Publish signed apk package
-        uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 # v1
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
         with:
-          prerelease: true
-          tag_name: ${{ env.TAG_NAME }}
-          files: |
-            ${{steps.sign-rustdesk.outputs.signedReleaseFile}}
+          name: dabliu-desk-${{ matrix.job.arch }}
+          path: ./signed-apk/*.apk
+          if-no-files-found: error
