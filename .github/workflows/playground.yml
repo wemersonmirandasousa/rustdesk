@@ -31,6 +31,7 @@ env:
 
 jobs:
   build-for-macOS:
+    if: false
     name: ${{ matrix.job.target }}
     runs-on: ${{ matrix.job.os }}
     strategy:
@@ -231,7 +232,7 @@ jobs:
 
 
   build-rustdesk-android:
-    if: false
+    if: true
     name: build rustdesk android apk ${{ matrix.job.target }}
     runs-on: ${{ matrix.job.os }}
     strategy:
