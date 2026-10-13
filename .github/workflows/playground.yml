@@ -5,6 +5,15 @@ on:
     # schedule build every night
   #  - cron: "0/6 * * * *"
   workflow_dispatch:
+    inputs:
+      build-android:
+        description: "Compilar APK Android"
+        type: boolean
+        default: true
+      build-windows:
+        description: "Compilar DABLIU DESK Windows"
+        type: boolean
+        default: true
 
 env:
   RUST_VERSION: "1.75" # https://github.com/rustdesk/rustdesk/discussions/7503
@@ -232,7 +241,7 @@ jobs:
 
 
   build-rustdesk-android:
-    if: true
+    if: ${{ inputs.build-android }}
     name: build rustdesk android apk ${{ matrix.job.target }}
     runs-on: ${{ matrix.job.os }}
     strategy:
@@ -414,4 +423,121 @@ jobs:
         with:
           name: dabliu-desk-${{ matrix.job.arch }}
           path: ./signed-apk/*.apk
+          if-no-files-found: error
+
+  build-for-windows:
+    if: ${{ inputs.build-windows }}
+    name: build dabliu desk windows ${{ matrix.job.target }}
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - {
+              target: x86_64-pc-windows-msvc,
+              os: windows-2022,
+              arch: x86_64,
+              flutter-arch: x64,
+              vcpkg-triplet: x64-windows-static,
+              build-args: "--vram",
+            }
+    steps:
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Checkout source code
+        uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3
+        with:
+          ref: master
+          submodules: recursive
+
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@ebc0426251bc40c7cd31162802432c68818ab8f0 # v2.0.9
+        with:
+          version: ${{ env.LLVM_VERSION }}
+
+      - name: Install flutter
+        id: flutter
+        uses: subosito/flutter-action@2783a3f08e1baf891508463f8c6653c258246225 # v2.12.0
+        with:
+          channel: "stable"
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          architecture: x64
+
+      - name: Replace engine with rustdesk custom flutter engine
+        run: |
+          flutter doctor -v
+          flutter precache --windows
+          Invoke-WebRequest -Uri https://github.com/rustdesk/engine/releases/download/main/windows-x64-release.zip -OutFile windows-x64-release.zip
+          Expand-Archive -Path windows-x64-release.zip -DestinationPath windows-x64-release
+          mv -Force windows-x64-release/*  C:/hostedtoolcache/windows/flutter/stable-${{ env.FLUTTER_VERSION }}-x64/bin/cache/artifacts/engine/windows-x64-release/
+
+      - name: Patch flutter
+        shell: bash
+        run: |
+          cp .github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff $(dirname $(dirname $(which flutter)))
+          cd $(dirname $(dirname $(which flutter)))
+          if [[ "3.24.5" == ${{env.FLUTTER_VERSION}} ]]; then
+            git apply flutter_3.24.4_dropdown_menu_enableFilter.diff
+          fi
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: ${{ matrix.job.target }}
+          components: "rustfmt"
+
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          prefix-key: ${{ matrix.job.os }}
+
+      - name: Install flutter rust bridge deps
+        shell: bash
+        run: |
+          git config --global core.longpaths true
+          cargo install flutter_rust_bridge_codegen --version ${{ env.FLUTTER_RUST_BRIDGE_VERSION }} --features "uuid" --locked
+          sed -i 's/uni_links_desktop/#uni_links_desktop/g' flutter/pubspec.yaml
+          pushd flutter/lib;  find . | grep dart | xargs sed -i 's/textScaler: TextScaler.linear(\(.*\)),/textScaleFactor: \1,/g'; popd;
+          pushd flutter ; flutter pub get ; popd
+          ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart
+
+      - name: Setup vcpkg with Github Actions binary cache
+        uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11
+        with:
+          vcpkgDirectory: C:\vcpkg
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+          doNotCache: false
+
+      - name: Install vcpkg dependencies
+        env:
+          VCPKG_DEFAULT_HOST_TRIPLET: ${{ matrix.job.vcpkg-triplet }}
+        shell: bash
+        run: |
+          if ! $VCPKG_ROOT/vcpkg install --triplet ${{ matrix.job.vcpkg-triplet }} --x-install-root="$VCPKG_ROOT/installed"; then
+            find "${VCPKG_ROOT}/" -name "*.log" | while read -r _1; do
+              echo "$_1:"; echo "======"; cat "$_1"; echo "======"; echo ""
+            done
+            exit 1
+          fi
+
+      - name: Build rustdesk
+        run: |
+          python3 .\build.py --portable --flutter --skip-portable-pack --hwcodec ${{ matrix.job.build-args }}
+          mv ./flutter/build/windows/${{ matrix.job.flutter-arch }}/runner/Release ./rustdesk
+          Invoke-WebRequest -Uri https://github.com/rustdesk-org/rdev/releases/download/usbmmidd_v2/usbmmidd_v2.zip -OutFile usbmmidd_v2.zip
+          Expand-Archive usbmmidd_v2.zip -DestinationPath .
+          Remove-Item -Path usbmmidd_v2\Win32 -Recurse
+          Remove-Item -Path "usbmmidd_v2\deviceinstaller64.exe", "usbmmidd_v2\deviceinstaller.exe", "usbmmidd_v2\usbmmidd.bat"
+          mv -Force .\usbmmidd_v2 ./rustdesk
+
+      - name: Upload DABLIU DESK windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dabliu-desk-windows-${{ matrix.job.arch }}
+          path: ./rustdesk
           if-no-files-found: error
