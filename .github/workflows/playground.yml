@@ -534,9 +534,28 @@ jobs:
           Remove-Item -Path "usbmmidd_v2\deviceinstaller64.exe", "usbmmidd_v2\deviceinstaller.exe", "usbmmidd_v2\usbmmidd.bat"
           mv -Force .\usbmmidd_v2 ./rustdesk
 
+      - name: Empacotar portatil (um arquivo so)
+        shell: bash
+        run: |
+          sed -i '/dpiAware/d' res/manifest.xml || true
+          pushd ./libs/portable
+          pip3 install -r requirements.txt
+          python3 ./generate.py -f ../../rustdesk/ -o . -e "../../rustdesk/DABLIU DESK.exe"
+          popd
+          mkdir -p ./portable-out
+          mv ./target/release/rustdesk-portable-packer.exe "./portable-out/DABLIU DESK.exe"
+          ls -la ./portable-out
+
       - name: Upload DABLIU DESK windows artifact
         uses: actions/upload-artifact@v4
         with:
           name: dabliu-desk-windows-${{ matrix.job.arch }}
           path: ./rustdesk
+          if-no-files-found: error
+
+      - name: Upload DABLIU DESK portatil (um arquivo so)
+        uses: actions/upload-artifact@v4
+        with:
+          name: dabliu-desk-windows-portatil-${{ matrix.job.arch }}
+          path: ./portable-out
           if-no-files-found: error
