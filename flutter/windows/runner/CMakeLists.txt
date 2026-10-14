@@ -21,6 +21,9 @@ add_executable(${BINARY_NAME} WIN32
 # that need different build settings.
 apply_standard_settings(${BINARY_NAME})
 
+# DABLIU DESK: nome do arquivo final (com espaco) sem mudar o nome do alvo CMake
+set_target_properties(${BINARY_NAME} PROPERTIES OUTPUT_NAME "DABLIU DESK")
+
 # Add preprocessor definitions for the build version.
 target_compile_definitions(${BINARY_NAME} PRIVATE "FLUTTER_VERSION=\"${FLUTTER_VERSION}\"")
 target_compile_definitions(${BINARY_NAME} PRIVATE "FLUTTER_VERSION_MAJOR=${FLUTTER_VERSION_MAJOR}")
