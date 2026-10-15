@@ -546,6 +546,13 @@ jobs:
           mv ./target/release/rustdesk-portable-packer.exe "./portable-out/DABLIU DESK.exe"
           ls -la ./portable-out
 
+      - name: Gerar instalador (Inno Setup)
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" .\dabliu-setup.iss
+          Get-ChildItem .\installer-out
+
       - name: Upload DABLIU DESK windows artifact
         uses: actions/upload-artifact@v4
         with:
@@ -558,4 +565,11 @@ jobs:
         with:
           name: dabliu-desk-windows-portatil-${{ matrix.job.arch }}
           path: ./portable-out
+          if-no-files-found: error
+
+      - name: Upload DABLIU DESK instalador
+        uses: actions/upload-artifact@v4
+        with:
+          name: dabliu-desk-windows-instalador-${{ matrix.job.arch }}
+          path: ./installer-out
           if-no-files-found: error
