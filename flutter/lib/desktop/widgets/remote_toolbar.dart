@@ -3,6 +3,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 import 'package:flutter_hbb/common/widgets/audio_input.dart';
 import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/common/widgets/toolbar.dart';
@@ -850,6 +851,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
       toolbarItems.add(_VoiceCallMenu(id: widget.id, ffi: widget.ffi));
     }
     if (!isWeb) toolbarItems.add(_RecordMenu());
+    if (!isWeb) toolbarItems.add(_AgentMenu());
     toolbarItems.add(_CloseMenu(id: widget.id, ffi: widget.ffi));
     final toolbarBorderRadius = BorderRadius.all(Radius.circular(4.0));
     // innerAxis: how the toolbar icons themselves flow.
@@ -2990,6 +2992,250 @@ class _CloseMenu extends StatelessWidget {
       },
       color: _ToolbarTheme.redColor,
       hoverColor: _ToolbarTheme.hoverRedColor,
+    );
+  }
+}
+
+// Botao "Agente": abre o painel do agente (modulo agentico) embutido no DABLIU DESK.
+// Fala com o dispatcher (py) por HTTP em 127.0.0.1:8766. Para rodar NO PC conectado,
+// marque "rodar no PC conectado" e aponte o executor remoto (pelo tunel do DABLIU DESK).
+class _AgentMenu extends StatelessWidget {
+  const _AgentMenu({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return _IconMenuButton(
+      icon: Icon(Icons.smart_toy_outlined,
+          color: Colors.white, size: _ToolbarTheme.buttonSize - 8),
+      tooltip: 'Agente',
+      onPressed: () => showDialog(
+          context: context,
+          barrierDismissible: true,
+          builder: (_) => _AgentPanelDialog()),
+      color: _ToolbarTheme.blueColor,
+      hoverColor: _ToolbarTheme.hoverBlueColor,
+    );
+  }
+}
+
+class _AgentPanelDialog extends StatefulWidget {
+  _AgentPanelDialog({Key? key}) : super(key: key);
+
+  @override
+  State<_AgentPanelDialog> createState() => _AgentPanelDialogState();
+}
+
+class _AgentPanelDialogState extends State<_AgentPanelDialog> {
+  final _dispCtrl = TextEditingController(text: 'http://127.0.0.1:8766');
+  final _tokenCtrl = TextEditingController();
+  final _remotoCtrl = TextEditingController(text: 'http://127.0.0.1:8765');
+  final _remotoTokenCtrl = TextEditingController();
+  final _tarefaCtrl = TextEditingController();
+  bool _olhos = false;
+  bool _monitor = false;
+  bool _noRemoto = false;
+  String _status = '';
+  String _resultado = '(aguardando)';
+  String _logTxt = '(sem log ainda)';
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer =
+        Timer.periodic(const Duration(milliseconds: 1500), (_) => _puxaLog());
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _dispCtrl.dispose();
+    _tokenCtrl.dispose();
+    _remotoCtrl.dispose();
+    _remotoTokenCtrl.dispose();
+    _tarefaCtrl.dispose();
+    super.dispose();
+  }
+
+  String get _base => _dispCtrl.text.trim().replaceAll(RegExp(r'/+$'), '');
+
+  Future<void> _enviar() async {
+    final tarefa = _tarefaCtrl.text.trim();
+    if (tarefa.isEmpty) return;
+    setState(() {
+      _status = 'rodando...';
+      _resultado = '...';
+    });
+    final body = <String, dynamic>{
+      'token': _tokenCtrl.text.trim(),
+      'tarefa': tarefa,
+      'olhos': _olhos,
+      'monitor': _monitor,
+    };
+    if (_noRemoto) {
+      body['remoto'] = _remotoCtrl.text.trim();
+      body['token_remoto'] = _remotoTokenCtrl.text.trim();
+    }
+    try {
+      final r = await http.post(Uri.parse('$_base/tarefa'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode(body));
+      final d = jsonDecode(r.body) as Map<String, dynamic>;
+      if (!mounted) return;
+      setState(() {
+        _resultado = (d['resumo'] ?? d['erro'] ?? r.body).toString();
+        _status = '';
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _resultado = 'erro: $e';
+        _status = '';
+      });
+    }
+  }
+
+  Future<void> _parar() async {
+    setState(() => _status = 'parando...');
+    try {
+      final r = await http.post(Uri.parse('$_base/parar'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'token': _tokenCtrl.text.trim()}));
+      final d = jsonDecode(r.body) as Map<String, dynamic>;
+      if (!mounted) return;
+      setState(() => _status = (d['msg'] ?? 'parado').toString());
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _status = 'erro: $e');
+    }
+  }
+
+  Future<void> _puxaLog() async {
+    try {
+      final r = await http.get(Uri.parse(
+          '$_base/log?n=60&token=${Uri.encodeComponent(_tokenCtrl.text.trim())}'));
+      if (r.statusCode == 200) {
+        final d = jsonDecode(r.body) as Map<String, dynamic>;
+        if (mounted) {
+          setState(() => _logTxt = (d['log'] ?? '(vazio)').toString());
+        }
+      }
+    } catch (_) {}
+  }
+
+  Widget _check(String label, bool val, ValueChanged<bool> onCh) {
+    return InkWell(
+      onTap: () => onCh(!val),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Checkbox(value: val, onChanged: (v) => onCh(v ?? false)),
+        Text(label),
+      ]),
+    );
+  }
+
+  Widget _caixa(String texto, {double? altura}) {
+    return Container(
+      width: double.infinity,
+      height: altura,
+      padding: EdgeInsets.all(8),
+      decoration: BoxDecoration(
+          color: Colors.black26, borderRadius: BorderRadius.circular(6)),
+      child: SingleChildScrollView(
+        reverse: altura != null,
+        child: Text(texto,
+            style: TextStyle(fontFamily: 'monospace', fontSize: 12)),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Row(children: [
+        Icon(Icons.smart_toy_outlined, size: 20),
+        SizedBox(width: 8),
+        Text('Agente'),
+      ]),
+      content: SizedBox(
+        width: 560,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Expanded(
+                    child: TextField(
+                        controller: _dispCtrl,
+                        decoration: InputDecoration(labelText: 'Dispatcher'))),
+                SizedBox(width: 8),
+                SizedBox(
+                    width: 150,
+                    child: TextField(
+                        controller: _tokenCtrl,
+                        decoration: InputDecoration(labelText: 'Token'))),
+              ]),
+              SizedBox(height: 8),
+              TextField(
+                  controller: _tarefaCtrl,
+                  minLines: 2,
+                  maxLines: 4,
+                  decoration: InputDecoration(
+                      labelText: 'Tarefa',
+                      hintText: 'ex.: abra o YouTube e pesquise lo-fi')),
+              SizedBox(height: 4),
+              Wrap(spacing: 12, children: [
+                _check('olhos (ver/clicar)', _olhos,
+                    (v) => setState(() => _olhos = v)),
+                _check('monitor (acompanhar)', _monitor,
+                    (v) => setState(() => _monitor = v)),
+                _check('rodar no PC conectado', _noRemoto,
+                    (v) => setState(() => _noRemoto = v)),
+              ]),
+              if (_noRemoto)
+                Row(children: [
+                  Expanded(
+                      child: TextField(
+                          controller: _remotoCtrl,
+                          decoration: InputDecoration(
+                              labelText: 'Executor remoto (tunel)'))),
+                  SizedBox(width: 8),
+                  SizedBox(
+                      width: 150,
+                      child: TextField(
+                          controller: _remotoTokenCtrl,
+                          decoration:
+                              InputDecoration(labelText: 'Token remoto'))),
+                ]),
+              SizedBox(height: 10),
+              Row(children: [
+                ElevatedButton(onPressed: _enviar, child: Text('Enviar')),
+                SizedBox(width: 8),
+                ElevatedButton(
+                    onPressed: _parar,
+                    style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.redAccent),
+                    child: Text('PARAR')),
+                SizedBox(width: 12),
+                Expanded(child: Text(_status)),
+              ]),
+              SizedBox(height: 10),
+              Text('Resultado', style: TextStyle(fontWeight: FontWeight.bold)),
+              SizedBox(height: 4),
+              _caixa(_resultado),
+              SizedBox(height: 10),
+              Text('Agente ao vivo',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+              SizedBox(height: 4),
+              _caixa(_logTxt, altura: 180),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.of(context).pop(), child: Text('Fechar'))
+      ],
     );
   }
 }
