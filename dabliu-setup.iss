@@ -6,7 +6,7 @@ AppName=DABLIU DESK
 AppVersion=1.0
 AppPublisher=Wemerson
 AppCopyright=Desenvolvido por Wemerson @2026
-DefaultDirName={localappdata}\Programs\DABLIU DESK
+DefaultDirName={localappdata}\Programs\DABLIU-DESK
 DisableProgramGroupPage=yes
 DisableDirPage=yes
 OutputBaseFilename=DABLIU-DESK-Setup
@@ -16,7 +16,7 @@ SolidCompression=yes
 PrivilegesRequired=lowest
 WizardStyle=modern
 SetupIconFile=.\flutter\windows\runner\resources\app_icon.ico
-UninstallDisplayIcon={app}\DABLIU DESK.exe
+UninstallDisplayIcon={app}\DABLIU-DESK.exe
 UninstallDisplayName=DABLIU DESK
 
 [Languages]
@@ -26,8 +26,8 @@ Name: "brazilianportuguese"; MessagesFile: "compiler:Languages\BrazilianPortugue
 Source: ".\rustdesk\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
 
 [Icons]
-Name: "{autoprograms}\DABLIU DESK"; Filename: "{app}\DABLIU DESK.exe"
-Name: "{autodesktop}\DABLIU DESK"; Filename: "{app}\DABLIU DESK.exe"
+Name: "{autoprograms}\DABLIU DESK"; Filename: "{app}\DABLIU-DESK.exe"
+Name: "{autodesktop}\DABLIU DESK"; Filename: "{app}\DABLIU-DESK.exe"
 
 [Run]
-Filename: "{app}\DABLIU DESK.exe"; Description: "Abrir o DABLIU DESK agora"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\DABLIU-DESK.exe"; Description: "Abrir o DABLIU DESK agora"; Flags: nowait postinstall skipifsilent

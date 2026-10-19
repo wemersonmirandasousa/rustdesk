@@ -540,10 +540,10 @@ jobs:
           sed -i '/dpiAware/d' res/manifest.xml || true
           pushd ./libs/portable
           pip3 install -r requirements.txt
-          python3 ./generate.py -f ../../rustdesk/ -o . -e "../../rustdesk/DABLIU DESK.exe"
+          python3 ./generate.py -f ../../rustdesk/ -o . -e "../../rustdesk/DABLIU-DESK.exe"
           popd
           mkdir -p ./portable-out
-          mv ./target/release/rustdesk-portable-packer.exe "./portable-out/DABLIU DESK.exe"
+          mv ./target/release/rustdesk-portable-packer.exe "./portable-out/DABLIU-DESK.exe"
           ls -la ./portable-out
 
       - name: Gerar instalador (Inno Setup)

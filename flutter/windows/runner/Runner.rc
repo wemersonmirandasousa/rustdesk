@@ -92,9 +92,9 @@ BEGIN
             VALUE "CompanyName", "Wemerson" "\0"
             VALUE "FileDescription", "DABLIU DESK" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "DABLIU DESK" "\0"
+            VALUE "InternalName", "DABLIU-DESK" "\0"
             VALUE "LegalCopyright", "Desenvolvido por Wemerson @2026" "\0"
-            VALUE "OriginalFilename", "DABLIU DESK.exe" "\0"
+            VALUE "OriginalFilename", "DABLIU-DESK.exe" "\0"
             VALUE "ProductName", "DABLIU DESK" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
