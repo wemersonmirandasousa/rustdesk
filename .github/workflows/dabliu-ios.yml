@@ -1,0 +1,119 @@
+name: dabliu-ios
+
+# Compila o DABLIU DESK para iPhone (ipa SEM assinatura) no macOS gratis
+# do GitHub Actions. Reaproveita os MESMOS secrets do Android/Windows
+# (RENDEZVOUS_SERVER / RS_PUB_KEY / API_SERVER), entao o servidor ja sai
+# embutido. O ipa sai sem assinar: voce assina no sideload (Sideloadly /
+# AltStore) com seu Apple ID gratis (app vale 7 dias por vez).
+
+on:
+  workflow_dispatch:
+
+env:
+  RUST_VERSION: "1.75"
+  FLUTTER_VERSION: "3.24.5"
+  VCPKG_COMMIT_ID: "9e593bb18ea69cc5095e012465dcd675a822ed0d"
+  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+  VERSION: "1.5.1"
+  # servidor embutido (os mesmos secrets que o Android/Windows ja usam)
+  RS_PUB_KEY: "${{ secrets.RS_PUB_KEY }}"
+  RENDEZVOUS_SERVER: "${{ secrets.RENDEZVOUS_SERVER }}"
+  API_SERVER: "${{ secrets.API_SERVER }}"
+
+jobs:
+  # mesma ponte Rust<->Flutter que o build oficial usa (ubuntu, flutter 3.22.3)
+  generate-bridge:
+    uses: ./.github/workflows/bridge.yml
+
+  build-ios:
+    name: build DABLIU DESK ios (ipa sem assinatura)
+    runs-on: macos-latest
+    needs: [generate-bridge]
+    steps:
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Instalar dependencias (nasm/yasm)
+        run: brew install nasm yasm
+
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: recursive
+
+      - name: Marca DABLIU DESK (nome do app no iOS)
+        run: |
+          perl -0pi -e 's#<string>RustDesk</string>#<string>DABLIU DESK</string>#g' flutter/ios/Runner/Info.plist
+          grep -A1 -E 'CFBundleName|CFBundleDisplayName' flutter/ios/Runner/Info.plist
+
+      - name: Instalar Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          channel: "stable"
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+
+      - name: Patch flutter
+        run: |
+          cd $(dirname $(dirname $(which flutter)))
+          if [[ "3.24.5" == ${{ env.FLUTTER_VERSION }} ]]; then
+            git apply ${{ github.workspace }}/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff
+          fi
+
+      - name: Instalar Rust
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: aarch64-apple-ios
+          components: "rustfmt"
+
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          prefix-key: rustdesk-lib-cache-ios
+          key: aarch64-apple-ios
+
+      - name: Restaurar arquivos da ponte
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: bridge-artifact
+          path: ./
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11
+        with:
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+          doNotCache: false
+
+      - name: Dependencias vcpkg (arm64-ios)
+        shell: bash
+        run: |
+          $VCPKG_ROOT/vcpkg install --triplet arm64-ios --x-install-root="$VCPKG_ROOT/installed"
+
+      - name: Compilar lib Rust (aarch64-apple-ios)
+        run: |
+          rustup target add aarch64-apple-ios
+          cargo build --locked --features flutter,hwcodec --release --target aarch64-apple-ios --lib
+
+      - name: Compilar app e empacotar ipa (sem assinatura)
+        shell: bash
+        run: |
+          pushd flutter
+          flutter build ios --release --no-codesign
+          popd
+          APP=$(find flutter/build/ios/iphoneos -maxdepth 1 -name "*.app" | head -1)
+          echo "App gerado: $APP"
+          rm -rf Payload && mkdir Payload
+          cp -r "$APP" Payload/
+          mkdir -p ipa-out
+          zip -qry "ipa-out/DABLIU-DESK-${VERSION}-unsigned.ipa" Payload
+          ls -la ipa-out
+
+      - name: Upload ipa
+        uses: actions/upload-artifact@v4
+        with:
+          name: dabliu-desk-ios
+          path: ./ipa-out/*.ipa
+          if-no-files-found: error
