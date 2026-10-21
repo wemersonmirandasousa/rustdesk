@@ -27,7 +27,8 @@ jobs:
 
   build-ios:
     name: build DABLIU DESK ios (ipa sem assinatura)
-    runs-on: macos-latest
+    # macos-latest (arm64) vive sem vaga ("job was not acquired"); Intel compila iOS igual
+    runs-on: macos-15-intel
     needs: [generate-bridge]
     steps:
       - name: Export GitHub Actions cache environment variables
