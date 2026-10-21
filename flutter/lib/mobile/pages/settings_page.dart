@@ -1060,6 +1060,11 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                   child: Text(_myId),
                 ),
                 leading: Icon(Icons.perm_identity)),
+            SettingsTile(
+              title: const Text('Licença'),
+              onPressed: (context) => mostrarLicencaDabliu(context),
+              leading: const Icon(Icons.description),
+            ),
             // DABLIU-DESK: sem politica propria publicada ainda
             if (false)
             SettingsTile(

@@ -3020,6 +3020,32 @@ int versionCmp(String v1, String v2) {
   return bind.versionToNumber(v: v1) - bind.versionToNumber(v: v2);
 }
 
+/// DABLIU-DESK: avisos legais da AGPL (credito do codigo original, sem
+/// garantia, licenca e codigo-fonte). A licenca exige que fiquem acessiveis.
+const String kDabliuLicenca =
+    'O DABLIU DESK é desenvolvido por Wemerson @2026 a partir de software de '
+    'código aberto.\n\n'
+    'Código original: Copyright (c) Purslane Tech Pte. Ltd.\n'
+    'Licença: GNU Affero General Public License v3.0 (AGPL-3.0).\n'
+    'Este programa é distribuído SEM NENHUMA GARANTIA. Você pode redistribuí-lo '
+    'e modificá-lo nos termos dessa licença.\n\n'
+    'Texto da licença: https://www.gnu.org/licenses/agpl-3.0.html\n'
+    'Código-fonte: https://github.com/wemersonmirandasousa/rustdesk';
+
+void mostrarLicencaDabliu(BuildContext context) {
+  showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('LICENÇA'),
+      content: const SingleChildScrollView(child: SelectableText(kDabliuLicenca)),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.of(ctx).pop(), child: const Text('OK')),
+      ],
+    ),
+  );
+}
+
 /// DABLIU-DESK: nome que aparece na tela, sem traco (o interno tem traco).
 String nomeExibido() => bind.mainGetAppNameSync().replaceAll('-', ' ');
 
