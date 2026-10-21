@@ -229,6 +229,15 @@ class MainActivity : FlutterActivity() {
             _rdClipboardManager = RdClipboardManager(getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
             FFI.setClipboardManager(_rdClipboardManager!!)
         }
+        // DABLIU-DESK: o app fica vivo em segundo plano ate o usuario encerrar
+        KeepAliveService.iniciar(this)
+    }
+
+    // DABLIU-DESK: Voltar na tela inicial so manda o app para segundo plano.
+    // Antes ele fechava a Activity e o onDestroy encerrava todas as sessoes.
+    override fun popSystemNavigator(): Boolean {
+        moveTaskToBack(true)
+        return true
     }
 
     override fun onDestroy() {

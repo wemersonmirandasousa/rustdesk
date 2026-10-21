@@ -13,6 +13,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../common.dart';
 import './dialog.dart';
 import './oidc_auth_status.dart';
+import '../login_gate.dart';
 
 const kOpSvgList = [
   'github',
@@ -986,6 +987,11 @@ Future<bool?> _openLoginDialog() async {
             userFocusNode: userFocusNode,
           ),
           thirdAuthWidget(),
+          // DABLIU-DESK: cadastro pelo painel do nosso servidor de contas
+          TextButton(
+            onPressed: abrirCadastroDabliu,
+            child: const Text('Criar conta'),
+          ).marginOnly(top: 8),
         ],
       ),
       onCancel: onDialogCancel,

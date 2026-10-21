@@ -102,6 +102,17 @@
             android:name=".FloatingWindowService"
             android:enabled="true" />
 
+        <!-- DABLIU-DESK: mantem o app vivo em segundo plano ate o usuario encerrar -->
+        <service
+            android:name=".KeepAliveService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="@string/foreground_service_special_use_subtype" />
+        </service>
+
         <!--
  Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java
