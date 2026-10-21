@@ -24,7 +24,7 @@ import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'common.dart';
-import 'common/login_gate.dart';
+import 'common/registro_aparelho.dart';
 import 'consts.dart';
 import 'mobile/pages/home_page.dart';
 import 'mobile/pages/server_page.dart';
@@ -450,8 +450,8 @@ class _AppState extends State<App> with WidgetsBindingObserver {
     };
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _updateOrientation());
-    // DABLIU-DESK: login obrigatorio antes de usar
-    WidgetsBinding.instance.addPostFrameCallback((_) => iniciarPortaDeLogin());
+    // DABLIU-DESK: o celular avisa o servidor que tem o app instalado
+    WidgetsBinding.instance.addPostFrameCallback((_) => registrarAparelho());
   }
 
   @override
