@@ -2384,7 +2384,7 @@ class __PrinterState extends State<_Printer> {
       return Align(
         alignment: Alignment.topLeft,
         child:
-            Text(translate('printer-requires-installed-{$appName}-client-tip')),
+            Text(translate('printer-requires-installed-{${nomeExibido()}}-client-tip')),
       ).marginOnly(left: _kCardLeftMargin);
     }
 
@@ -2404,7 +2404,7 @@ class __PrinterState extends State<_Printer> {
               ? Offstage()
               : Align(
                   alignment: Alignment.topLeft,
-                  child: Text(translate('printer-{$appName}-not-installed-tip'))
+                  child: Text(translate('printer-{${nomeExibido()}}-not-installed-tip'))
                       .marginOnly(bottom: 10.0),
                 ),
         ),
@@ -2419,7 +2419,7 @@ class __PrinterState extends State<_Printer> {
                               .copyWith(color: Colors.red))
                       .marginOnly(bottom: 10.0)),
         ),
-        _Button('Install {$appName} Printer', () {
+        _Button('Install {${nomeExibido()}} Printer', () {
           failedMsg.value = '';
           bind.mainSetCommon(key: 'install-printer', value: '');
         })
@@ -2429,7 +2429,7 @@ class __PrinterState extends State<_Printer> {
     Widget tipReady() {
       return Align(
         alignment: Alignment.topLeft,
-        child: Text(translate('printer-{$appName}-ready-tip')),
+        child: Text(translate('printer-{${nomeExibido()}}-ready-tip')),
       ).marginOnly(left: _kCardLeftMargin);
     }
 
@@ -2552,6 +2552,8 @@ class _AboutState extends State<_About> {
               SelectionArea(
                   child: Text('${translate('ID')}: $myId')
                       .marginSymmetric(vertical: 4.0)),
+              // DABLIU-DESK: sem site proprio ainda; nada de links do rustdesk.com
+              if (false)
               InkWell(
                   onTap: () {
                     launchUrlString('https://rustdesk.com/privacy.html');
@@ -2560,6 +2562,7 @@ class _AboutState extends State<_About> {
                     translate('Privacy Statement'),
                     style: linkStyle,
                   ).marginSymmetric(vertical: 4.0)),
+              if (false)
               InkWell(
                   onTap: () {
                     launchUrlString('https://rustdesk.com');
@@ -2569,7 +2572,7 @@ class _AboutState extends State<_About> {
                     style: linkStyle,
                   ).marginSymmetric(vertical: 4.0)),
               Container(
-                decoration: const BoxDecoration(color: Color(0xFF2c8cff)),
+                decoration: const BoxDecoration(color: Color(0xFF1B6E2A)),
                 padding:
                     const EdgeInsets.symmetric(vertical: 24, horizontal: 8),
                 child: SelectionArea(
