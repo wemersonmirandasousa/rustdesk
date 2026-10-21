@@ -1180,6 +1180,13 @@ pub fn get_app_name() -> String {
     hbb_common::config::APP_NAME.read().unwrap().clone()
 }
 
+/// DABLIU-DESK: nome que aparece para quem usa ("DABLIU DESK", sem traco).
+/// O APP_NAME interno segue "DABLIU-DESK": o Windows usa ele sem aspas em
+/// sc/taskkill/reg e o instalador recusa espaco.
+pub fn get_app_display_name() -> String {
+    get_app_name().replace('-', " ")
+}
+
 #[inline]
 pub fn is_rustdesk() -> bool {
     hbb_common::config::APP_NAME.read().unwrap().eq("RustDesk")

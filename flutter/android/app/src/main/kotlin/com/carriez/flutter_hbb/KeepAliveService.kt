@@ -81,7 +81,7 @@ class KeepAliveService : Service() {
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val gerente = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             gerente.createNotificationChannel(
-                NotificationChannel(CANAL, "DABLIU-DESK ativo", NotificationManager.IMPORTANCE_LOW)
+                NotificationChannel(CANAL, "DABLIU DESK ativo", NotificationManager.IMPORTANCE_LOW)
             )
             Notification.Builder(this, CANAL)
         } else {
@@ -92,7 +92,7 @@ class KeepAliveService : Service() {
         val acaoEncerrar = Notification.Action.Builder(0, "Encerrar", encerrar).build()
         return builder
             .setSmallIcon(R.mipmap.ic_stat_logo)
-            .setContentTitle("DABLIU-DESK ativo")
+            .setContentTitle("DABLIU DESK ativo")
             .setContentText("Continua aberto em segundo plano. Toque para abrir.")
             .setContentIntent(abrir)
             .setOngoing(true)
