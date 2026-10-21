@@ -150,7 +150,15 @@ class HomePageState extends State<HomePage> {
         ],
       );
     }
-    return Text(bind.mainGetAppNameSync());
+    // DABLIU-DESK: logo verde ao lado do nome no topo do app
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        loadIcon(28),
+        const SizedBox(width: 10),
+        const Text('DABLIU DESK'),
+      ],
+    );
   }
 }
 
