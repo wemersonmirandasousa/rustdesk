@@ -200,6 +200,9 @@ class AgentInSession extends ChangeNotifier {
           'conectado. PREFIRA comando para diagnosticar e agir no sistema (processos, '
           'servicos, disco, rede, arquivos, programas, listar/trazer janelas) - e mais '
           'confiavel que clicar; use a tela so quando nao der por comando. ' : ''}'
+      'Para tarefas no NAVEGADOR do remoto: '
+      '${temExecutor ? 'abra a pagina com comando (ex.: Start-Process "https://..."), ' : ''}'
+      'depois interaja pela tela com clicar/digitar (confira com print). '
       'Ao terminar, responda um resumo curto comecando com "PRONTO:".';
 
   Future<void> executar(String tarefa,
@@ -494,13 +497,37 @@ class AgentInSession extends ChangeNotifier {
   }
 
   // ---- AGIR no sistema: PowerShell no remoto pelo executor (tunel) ----
+  Map<String, dynamic>? _alvo; // identidade do executor (trava troca de PC)
+
+  Future<Map<String, dynamic>?> _identidade(String base) async {
+    if (_alvo != null) return _alvo;
+    try {
+      final r = await http
+          .post(Uri.parse('$base/identidade'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({'token': executorToken}))
+          .timeout(const Duration(seconds: 15));
+      if (r.statusCode == 200) {
+        _alvo = (jsonDecode(utf8.decode(r.bodyBytes)) as Map)
+            .cast<String, dynamic>();
+      }
+    } catch (_) {}
+    return _alvo;
+  }
+
   Future<String> _rodarComando(String cmd) async {
     try {
       final base = executorUrl.trim().replaceAll(RegExp(r'/+$'), '');
+      final alvo = await _identidade(base);
+      if (alvo == null) {
+        return 'ERRO: o Executor nao respondeu /identidade. Confira URL, token e o '
+            'tunel do DABLIU DESK (porta encaminhada para 127.0.0.1 do remoto).';
+      }
       final r = await http
           .post(Uri.parse('$base/cmd'),
               headers: {'Content-Type': 'application/json'},
-              body: jsonEncode({'token': executorToken, 'comando': cmd}))
+              body: jsonEncode(
+                  {'token': executorToken, 'comando': cmd, 'alvo': alvo}))
           .timeout(const Duration(seconds: 120));
       if (r.statusCode != 200) {
         return 'ERRO do executor (${r.statusCode}): '
