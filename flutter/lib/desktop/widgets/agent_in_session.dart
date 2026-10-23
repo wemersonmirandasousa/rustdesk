@@ -157,9 +157,13 @@ class AgentInSession extends ChangeNotifier {
       'Voce e um tecnico de informatica operando o COMPUTADOR CONECTADO (remoto) '
       'pelo DABLIU DESK, em pt-BR. Tudo que voce faz acontece NELE, nunca no PC do '
       'operador. Trabalhe assim: 1) tire um print para VER, 2) diagnostique, 3) aja '
-      'com clicar/digitar/tecla, 4) confira com outro print. Explique em 1 linha '
-      'antes de cada acao. Peca o minimo de acoes. Ao terminar, responda um resumo '
-      'curto comecando com "PRONTO:".';
+      'com clicar/digitar/tecla, 4) confira com OUTRO print depois de CADA acao. '
+      'Clique com PRECISAO: mire o CENTRO do elemento usando as coordenadas exatas do '
+      'tamanho informado no print; se o clique nao surtir efeito, tire um print e '
+      'CORRIJA a posicao em vez de repetir no mesmo lugar. Para trazer a janela certa '
+      'para frente antes de agir, use a ferramenta tecla (ex.: alt+tab, ou win para o '
+      'menu Iniciar). Explique em 1 linha antes de cada acao. Peca o minimo de acoes. '
+      'Ao terminar, responda um resumo curto comecando com "PRONTO:".';
 
   Future<void> executar(String tarefa) async {
     _parar = false;
@@ -278,14 +282,25 @@ class AgentInSession extends ChangeNotifier {
     try {
       await File(path).delete();
     } catch (_) {}
+    int w = 0, h = 0;
+    if (bytes.length >= 24) {
+      w = (bytes[16] << 24) | (bytes[17] << 16) | (bytes[18] << 8) | bytes[19];
+      h = (bytes[20] << 24) | (bytes[21] << 16) | (bytes[22] << 8) | bytes[23];
+    }
     final b64 = base64Encode(bytes);
-    _log('[print do remoto]');
+    _log('[print do remoto $w x $h]');
     return [
       {
         'type': 'image',
         'source': {'type': 'base64', 'media_type': 'image/png', 'data': b64}
       },
-      {'type': 'text', 'text': 'Print do computador conectado.'}
+      {
+        'type': 'text',
+        'text':
+            'Print do computador conectado: $w x $h pixels. (0,0) e o canto superior '
+            'esquerdo e ($w,$h) o inferior direito. Ao clicar, use coordenadas EXATAS '
+            'dentro desse tamanho, mirando o CENTRO do elemento alvo.'
+      }
     ];
   }
 
