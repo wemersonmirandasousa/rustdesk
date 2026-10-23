@@ -14,6 +14,9 @@ import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
+import 'package:flutter_hbb/models/model.dart';
+import 'package:flutter_hbb/models/terminal_model.dart';
+import 'package:flutter_hbb/desktop/pages/terminal_connection_manager.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/consts.dart';
 
@@ -72,6 +75,8 @@ class AgentInSession extends ChangeNotifier {
       required this.apiKey,
       required this.modelo,
       required this.pedirAprovacao,
+      this.peerId = '',
+      this.password,
       this.executorUrl = '',
       this.executorToken = ''});
 
@@ -79,6 +84,8 @@ class AgentInSession extends ChangeNotifier {
   final String apiKey;
   final String modelo;
   final PedirAprovacao pedirAprovacao;
+  final String peerId; // id do PC conectado, para abrir o terminal nativo
+  final String? password; // senha usada na conexao atual (para o terminal)
   final String executorUrl;
   final String executorToken;
 
@@ -102,6 +109,7 @@ class AgentInSession extends ChangeNotifier {
     _parar = true;
     _log('PARAR pedido pelo usuario.', destaque: true);
     fase = AgentFase.parado;
+    _fecharTerminal();
     notifyListeners();
   }
 
@@ -119,25 +127,25 @@ class AgentInSession extends ChangeNotifier {
 
   // ---- ferramentas que a IA pode chamar (estilo DIY, robusto a versao da API) ----
   List<Map<String, dynamic>> _ferramentas() => [
-        if (temExecutor)
-          {
-            'name': 'comando',
-            'description':
-                'Roda um comando PowerShell NO computador conectado (o remoto) e devolve a '
-                    'saida (stdout/stderr/exit). Use para DIAGNOSTICAR e AGIR no sistema: '
-                    'processos, CPU/memoria/disco, servicos, rede, arquivos/pastas, programas, '
-                    'janelas. PREFIRA isto a clicar quando der por comando.',
-            'input_schema': {
-              'type': 'object',
-              'properties': {
-                'comando': {
-                  'type': 'string',
-                  'description': 'O comando PowerShell a executar no PC conectado.'
-                }
-              },
-              'required': ['comando']
+        {
+          'name': 'comando',
+          'description':
+              'Roda um comando no terminal DO computador conectado (o remoto) e devolve a '
+                  'saida de texto. Use para DIAGNOSTICAR e AGIR no sistema: processos, '
+                  'CPU/memoria/disco, servicos, rede, arquivos/pastas, programas, baixar '
+                  'arquivos, listar/trazer janelas. PREFIRA isto a clicar quando der por '
+                  'comando. O terminal e o do proprio DABLIU DESK (Windows: PowerShell).',
+          'input_schema': {
+            'type': 'object',
+            'properties': {
+              'comando': {
+                'type': 'string',
+                'description': 'O comando a executar no PC conectado.'
+              }
             },
+            'required': ['comando']
           },
+        },
         {
           'name': 'tirar_print',
           'description':
@@ -196,13 +204,13 @@ class AgentInSession extends ChangeNotifier {
       'CORRIJA a posicao em vez de repetir no mesmo lugar. Para trazer a janela certa '
       'para frente antes de agir, use a ferramenta tecla (ex.: alt+tab, ou win para o '
       'menu Iniciar). Explique em 1 linha antes de cada acao. Peca o minimo de acoes. '
-      '${temExecutor ? 'Voce TAMBEM tem a ferramenta comando: PowerShell direto no PC '
-          'conectado. PREFIRA comando para diagnosticar e agir no sistema (processos, '
-          'servicos, disco, rede, arquivos, programas, listar/trazer janelas) - e mais '
-          'confiavel que clicar; use a tela so quando nao der por comando. ' : ''}'
-      'Para tarefas no NAVEGADOR do remoto: '
-      '${temExecutor ? 'abra a pagina com comando (ex.: Start-Process "https://..."), ' : ''}'
-      'depois interaja pela tela com clicar/digitar (confira com print). '
+      'Voce TAMBEM tem a ferramenta comando: terminal direto no PC conectado (Windows: '
+      'PowerShell). PREFIRA comando para diagnosticar e agir no sistema (processos, '
+      'servicos, disco, rede, arquivos, programas, baixar arquivos, listar/trazer '
+      'janelas) - e mais confiavel que clicar; use a tela so quando nao der por comando. '
+      'Para tarefas no NAVEGADOR do remoto: abra a pagina com comando '
+      '(ex.: Start-Process "https://..."), depois interaja pela tela com clicar/digitar '
+      '(confira com print). '
       'Ao terminar, responda um resumo curto comecando com "PRONTO:".';
 
   Future<void> executar(String tarefa,
@@ -277,6 +285,8 @@ class AgentInSession extends ChangeNotifier {
     } catch (e) {
       _log('ERRO: $e', destaque: true);
       _setFase(AgentFase.erro);
+    } finally {
+      _fecharTerminal();
     }
   }
 
@@ -344,10 +354,6 @@ class AgentInSession extends ChangeNotifier {
     switch (nome) {
       case 'comando':
         final cmd = (entrada['comando'] ?? '').toString();
-        if (!temExecutor) {
-          return 'Executor nao configurado (Config. > Agente). Sem ele nao da pra '
-              'rodar comando no PC conectado; use clicar/digitar na tela.';
-        }
         if (_perigo.hasMatch(cmd)) {
           final ok = await _aprovar('rodar no PC conectado: $cmd');
           if (!ok) return 'Usuario NEGOU o comando.';
@@ -496,7 +502,146 @@ class AgentInSession extends ChangeNotifier {
     }
   }
 
-  // ---- AGIR no sistema: PowerShell no remoto pelo executor (tunel) ----
+  // ---- AGIR no sistema: terminal NATIVO do DABLIU DESK (principal) ----
+  // Abre uma conexao de terminal ao MESMO PC (so precisa do proprio DABLIU DESK
+  // la), roda o comando e le a saida. Reaproveita a conexao durante a tarefa.
+  // Se nao abrir, cai no Executor externo (plano B).
+  FFI? _termFfi;
+  TerminalModel? _termModel;
+  int _termId = 0;
+  StringBuffer _termBuf = StringBuffer();
+  Completer<void>? _termFim;
+  String _termMarca = '';
+
+  Future<String> _rodarComando(String cmd) async {
+    final nativo = await _rodarPeloTerminalNativo(cmd);
+    if (nativo != null) return nativo;
+    _log('[comando] terminal nativo indisponivel; tentando Executor...');
+    if (temExecutor) return await _rodarPeloExecutor(cmd);
+    return 'Nao consegui abrir o terminal nativo no PC conectado (ele pode ter '
+        'bloqueado o terminal) e nao ha Executor configurado. Faca pela tela '
+        '(clicar/digitar) ou configure o Executor nas Config.';
+  }
+
+  Future<bool> _abrirTerminal() async {
+    if (_termModel?.terminalOpened == true &&
+        _termFfi != null &&
+        !_termFfi!.closed) return true;
+    try {
+      _termId = 990000 + (DateTime.now().millisecondsSinceEpoch % 9000);
+      final ffi = TerminalConnectionManager.getConnection(
+        peerId: peerId,
+        password: password,
+        isSharedPassword: null,
+        forceRelay: null,
+        connToken: null,
+      );
+      final term = TerminalModel(ffi, _termId);
+      term.onData = (t) {
+        _termBuf.write(t);
+        final f = _termFim;
+        if (f != null &&
+            !f.isCompleted &&
+            _termBuf.toString().contains(_termMarca)) {
+          f.complete();
+        }
+      };
+      ffi.registerTerminalModel(_termId, term);
+      _termFfi = ffi;
+      _termModel = term;
+      var ok =
+          await _esperar(() => term.terminalOpened, const Duration(seconds: 15));
+      if (!ok) {
+        // conexao reutilizada: onReady pode nao disparar, abre na mao
+        try {
+          await term.openTerminal();
+        } catch (_) {}
+        ok = await _esperar(
+            () => term.terminalOpened, const Duration(seconds: 8));
+      }
+      if (!ok) {
+        _fecharTerminal();
+        return false;
+      }
+      return true;
+    } catch (e) {
+      _log('[comando] nao abriu terminal nativo: $e');
+      _fecharTerminal();
+      return false;
+    }
+  }
+
+  Future<String?> _rodarPeloTerminalNativo(String cmd) async {
+    if (peerId.trim().isEmpty) return null;
+    if (!await _abrirTerminal()) return null;
+    final marca = 'DABFIM${DateTime.now().microsecondsSinceEpoch}X';
+    _termMarca = marca;
+    _termBuf = StringBuffer();
+    _termFim = Completer<void>();
+    try {
+      await bind.sessionSendTerminalInput(
+          sessionId: _termFfi!.sessionId, terminalId: _termId, data: '$cmd\r');
+      await Future.delayed(const Duration(milliseconds: 150));
+      await bind.sessionSendTerminalInput(
+          sessionId: _termFfi!.sessionId,
+          terminalId: _termId,
+          data: 'echo $marca\r');
+      try {
+        await _termFim!.future.timeout(const Duration(seconds: 120));
+      } catch (_) {}
+      return _limparSaida(_termBuf.toString(), marca);
+    } catch (e) {
+      _log('[comando] erro no terminal nativo: $e');
+      return null;
+    }
+  }
+
+  void _fecharTerminal() {
+    final ffi = _termFfi;
+    final term = _termModel;
+    final id = _termId;
+    _termFfi = null;
+    _termModel = null;
+    if (ffi == null) return;
+    () async {
+      try {
+        await bind.sessionCloseTerminal(sessionId: ffi.sessionId, terminalId: id);
+      } catch (_) {}
+      try {
+        ffi.unregisterTerminalModel(id);
+        term?.dispose();
+      } catch (_) {}
+      try {
+        TerminalConnectionManager.releaseConnection(peerId);
+      } catch (_) {}
+    }();
+  }
+
+  Future<bool> _esperar(bool Function() cond, Duration limite) async {
+    final fim = DateTime.now().add(limite);
+    while (DateTime.now().isBefore(fim)) {
+      if (_parar) return false;
+      if (cond()) return true;
+      await Future.delayed(const Duration(milliseconds: 150));
+    }
+    return cond();
+  }
+
+  String _limparSaida(String bruto, String marca) {
+    var s = bruto;
+    final i = s.indexOf(marca);
+    if (i >= 0) s = s.substring(0, i);
+    s = s.replaceAll('echo $marca', '');
+    s = s.replaceAll(RegExp(r'echo\s*$'), '');
+    // tira sequencias ANSI (cores, cursor) e BEL
+    s = s.replaceAll(RegExp('\u001B\\[[0-9;?]*[ -/]*[@-~]'), '');
+    s = s.replaceAll(RegExp('\u001B\\][^\u0007]*\u0007'), '');
+    s = s.replaceAll('\u0007', '');
+    final t = s.trim();
+    return t.isEmpty ? '(sem saida)' : t;
+  }
+
+  // ---- AGIR no sistema: Executor externo (plano B, pelo tunel) ----
   Map<String, dynamic>? _alvo; // identidade do executor (trava troca de PC)
 
   Future<Map<String, dynamic>?> _identidade(String base) async {
@@ -515,7 +660,7 @@ class AgentInSession extends ChangeNotifier {
     return _alvo;
   }
 
-  Future<String> _rodarComando(String cmd) async {
+  Future<String> _rodarPeloExecutor(String cmd) async {
     try {
       final base = executorUrl.trim().replaceAll(RegExp(r'/+$'), '');
       final alvo = await _identidade(base);
@@ -577,7 +722,11 @@ class AgentInSession extends ChangeNotifier {
 /// Le a chave/modelo salvos em Configuracoes (kOptionAgentApiKey/Modelo).
 class AgentPanel extends StatefulWidget {
   final SessionID sessionId;
-  const AgentPanel({Key? key, required this.sessionId}) : super(key: key);
+  final String peerId;
+  final String? password;
+  const AgentPanel(
+      {Key? key, required this.sessionId, this.peerId = '', this.password})
+      : super(key: key);
 
   @override
   State<AgentPanel> createState() => _AgentPanelState();
@@ -663,6 +812,8 @@ class _AgentPanelState extends State<AgentPanel> {
           ? 'claude-sonnet-5-5'
           : _modeloCtrl.text.trim(),
       pedirAprovacao: _pedirAprovacao,
+      peerId: widget.peerId,
+      password: widget.password,
       executorUrl: _executorUrl,
       executorToken: _executorToken,
     );

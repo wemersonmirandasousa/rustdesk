@@ -95,6 +95,10 @@ class TerminalModel with ChangeNotifier {
   ValueChanged<String>? onClipboardWriteBlocked;
   ValueChanged<String>? onClipboardWriteSucceeded;
 
+  /// Optional sink for an in-app consumer (the agent) that wants the decoded
+  /// remote output without a terminal view. Called for every data chunk.
+  ValueChanged<String>? onData;
+
   Future<void> _handleInput(String data) async {
     // xterm can complete asynchronous input after the Flutter page has gone
     // away. Stop before reading or clearing widget-owned modifier state.
@@ -514,6 +518,7 @@ class TerminalModel with ChangeNotifier {
           return;
         }
 
+        onData?.call(text);
         _writeToTerminal(text, suppressTerminalOutput: suppressTerminalOutput);
       } catch (e) {
         debugPrint('[TerminalModel] Failed to process terminal data: $e');

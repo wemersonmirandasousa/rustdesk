@@ -638,8 +638,10 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                         setState(() => _showEdit = false);
                         showDialog(
                             context: context,
-                            builder: (_) =>
-                                AgentPanel(sessionId: gFFI.sessionId));
+                            builder: (_) => AgentPanel(
+                                sessionId: gFFI.sessionId,
+                                peerId: widget.id,
+                                password: widget.password));
                       },
                     ),
                     IconButton(

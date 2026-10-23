@@ -441,6 +441,7 @@ class RemoteToolbar extends StatefulWidget {
   final String id;
   final FFI ffi;
   final ToolbarState state;
+  final String? password;
   final Function(int, Function(bool)) onEnterOrLeaveImageSetter;
   final Function(int) onEnterOrLeaveImageCleaner;
   final Function(VoidCallback) setRemoteState;
@@ -450,6 +451,7 @@ class RemoteToolbar extends StatefulWidget {
     required this.id,
     required this.ffi,
     required this.state,
+    this.password,
     required this.onEnterOrLeaveImageSetter,
     required this.onEnterOrLeaveImageCleaner,
     required this.setRemoteState,
@@ -851,7 +853,9 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
       toolbarItems.add(_VoiceCallMenu(id: widget.id, ffi: widget.ffi));
     }
     if (!isWeb) toolbarItems.add(_RecordMenu());
-    if (!isWeb) toolbarItems.add(_AgentMenu(ffi: widget.ffi));
+    if (!isWeb) {
+      toolbarItems.add(_AgentMenu(ffi: widget.ffi, password: widget.password));
+    }
     toolbarItems.add(_CloseMenu(id: widget.id, ffi: widget.ffi));
     final toolbarBorderRadius = BorderRadius.all(Radius.circular(4.0));
     // innerAxis: how the toolbar icons themselves flow.
@@ -2998,7 +3002,9 @@ class _CloseMenu extends StatelessWidget {
 
 class _AgentMenu extends StatelessWidget {
   final FFI ffi;
-  const _AgentMenu({Key? key, required this.ffi}) : super(key: key);
+  final String? password;
+  const _AgentMenu({Key? key, required this.ffi, this.password})
+      : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -3009,7 +3015,8 @@ class _AgentMenu extends StatelessWidget {
       onPressed: () => showDialog(
           context: context,
           barrierDismissible: false,
-          builder: (_) => AgentPanel(sessionId: ffi.sessionId)),
+          builder: (_) => AgentPanel(
+              sessionId: ffi.sessionId, peerId: ffi.id, password: password)),
       color: _ToolbarTheme.blueColor,
       hoverColor: _ToolbarTheme.hoverBlueColor,
     );
