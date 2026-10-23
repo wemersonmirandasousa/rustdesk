@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/common/widgets/toolbar.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/desktop/widgets/agent_in_session.dart';
 import 'package:flutter_hbb/mobile/widgets/floating_mouse.dart';
 import 'package:flutter_hbb/mobile/widgets/floating_mouse_widgets.dart';
 import 'package:flutter_hbb/mobile/widgets/gesture_help.dart';
@@ -630,6 +631,17 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                                   ))
                         ]) +
                   [
+                    IconButton(
+                      color: Colors.white,
+                      icon: Icon(Icons.smart_toy_outlined),
+                      onPressed: () {
+                        setState(() => _showEdit = false);
+                        showDialog(
+                            context: context,
+                            builder: (_) =>
+                                AgentPanel(sessionId: gFFI.sessionId));
+                      },
+                    ),
                     IconButton(
                       color: Colors.white,
                       icon: Icon(Icons.more_vert),

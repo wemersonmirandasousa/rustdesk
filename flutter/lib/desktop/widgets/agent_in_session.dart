@@ -14,6 +14,7 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/consts.dart';
 
 /// Ponte do print: o agente pede `sessionTakeScreenshot`; quando o evento
 /// 'screenshot' chega no model.dart, ele chama `entregar` (gancho fino la),
@@ -392,5 +393,224 @@ class AgentInSession extends ChangeNotifier {
       _log('ERRO de rede com a IA: $e', destaque: true);
       return null;
     }
+  }
+}
+
+/// Painel do Agente, compartilhado entre desktop e mobile. Abra via showDialog.
+/// Le a chave/modelo salvos em Configuracoes (kOptionAgentApiKey/Modelo).
+class AgentPanel extends StatefulWidget {
+  final SessionID sessionId;
+  const AgentPanel({Key? key, required this.sessionId}) : super(key: key);
+
+  @override
+  State<AgentPanel> createState() => _AgentPanelState();
+}
+
+class _AgentPanelState extends State<AgentPanel> {
+  final _keyCtrl = TextEditingController();
+  final _modeloCtrl = TextEditingController(text: 'claude-sonnet-5-5');
+  final _tarefaCtrl = TextEditingController();
+  final _scroll = ScrollController();
+  AgentInSession? _agent;
+
+  @override
+  void initState() {
+    super.initState();
+    try {
+      final k = bind.mainGetLocalOption(key: kOptionAgentApiKey);
+      if (k.isNotEmpty) _keyCtrl.text = k;
+      final m = bind.mainGetLocalOption(key: kOptionAgentModelo);
+      if (m.isNotEmpty) _modeloCtrl.text = m;
+    } catch (_) {}
+  }
+
+  @override
+  void dispose() {
+    _agent?.removeListener(_onAgent);
+    _agent?.parar();
+    _keyCtrl.dispose();
+    _modeloCtrl.dispose();
+    _tarefaCtrl.dispose();
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  bool get _rodando =>
+      _agent != null &&
+      (_agent!.fase == AgentFase.pensando ||
+          _agent!.fase == AgentFase.agindo ||
+          _agent!.fase == AgentFase.aprovando);
+
+  void _onAgent() {
+    if (mounted) setState(() {});
+  }
+
+  Future<bool> _pedirAprovacao(String desc) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        title: const Text('Aprovar acao no computador conectado'),
+        content: Text(desc),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Negar')),
+          ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Aprovar')),
+        ],
+      ),
+    );
+    return ok ?? false;
+  }
+
+  void _enviar() {
+    final tarefa = _tarefaCtrl.text.trim();
+    final key = _keyCtrl.text.trim();
+    if (tarefa.isEmpty || key.isEmpty || _rodando) return;
+    try {
+      bind.mainSetLocalOption(key: kOptionAgentApiKey, value: key);
+      bind.mainSetLocalOption(
+          key: kOptionAgentModelo, value: _modeloCtrl.text.trim());
+    } catch (_) {}
+    _agent?.removeListener(_onAgent);
+    final agent = AgentInSession(
+      sessionId: widget.sessionId,
+      apiKey: key,
+      modelo: _modeloCtrl.text.trim().isEmpty
+          ? 'claude-sonnet-5-5'
+          : _modeloCtrl.text.trim(),
+      pedirAprovacao: _pedirAprovacao,
+    );
+    agent.addListener(_onAgent);
+    setState(() => _agent = agent);
+    agent.executar(tarefa);
+  }
+
+  String _faseTexto(AgentFase f) {
+    switch (f) {
+      case AgentFase.pensando:
+        return 'pensando...';
+      case AgentFase.aprovando:
+        return 'aguardando sua aprovacao...';
+      case AgentFase.agindo:
+        return 'agindo no computador conectado...';
+      case AgentFase.feito:
+        return 'concluido';
+      case AgentFase.erro:
+        return 'erro';
+      case AgentFase.parado:
+        return '';
+    }
+  }
+
+  Widget _caixaPassos() {
+    final passos = _agent?.passos ?? const <AgentStep>[];
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scroll.hasClients) {
+        _scroll.jumpTo(_scroll.position.maxScrollExtent);
+      }
+    });
+    return Container(
+      width: double.infinity,
+      height: 200,
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+          color: Colors.black26, borderRadius: BorderRadius.circular(6)),
+      child: passos.isEmpty
+          ? const Text('(sem atividade ainda)',
+              style: TextStyle(fontFamily: 'monospace', fontSize: 12))
+          : ListView.builder(
+              controller: _scroll,
+              itemCount: passos.length,
+              itemBuilder: (_, i) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 1),
+                    child: Text(passos[i].texto,
+                        style: TextStyle(
+                            fontFamily: 'monospace',
+                            fontSize: 12,
+                            fontWeight: passos[i].destaque
+                                ? FontWeight.bold
+                                : FontWeight.normal)),
+                  )),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final fase = _agent?.fase ?? AgentFase.parado;
+    final larg = (MediaQuery.of(context).size.width - 48).clamp(0.0, 560.0);
+    return PopScope(
+      canPop: !_rodando,
+      child: AlertDialog(
+        title: Row(children: [
+          const Icon(Icons.smart_toy_outlined, size: 20),
+          const SizedBox(width: 8),
+          const Expanded(child: Text('Agente')),
+        ]),
+        content: SizedBox(
+          width: larg,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                    'O agente age NO computador conectado pela propria sessao: '
+                    've a tela, clica e digita nele. Cada acao pede aprovacao.'),
+                const SizedBox(height: 8),
+                TextField(
+                  enabled: !_rodando,
+                  obscureText: true,
+                  controller: _keyCtrl,
+                  decoration: const InputDecoration(
+                      labelText: 'Chave da IA (ou defina nas Config.)'),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  enabled: !_rodando,
+                  controller: _modeloCtrl,
+                  decoration: const InputDecoration(labelText: 'Modelo'),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _tarefaCtrl,
+                  enabled: !_rodando,
+                  minLines: 2,
+                  maxLines: 4,
+                  decoration: const InputDecoration(
+                      labelText: 'Tarefa', hintText: 'ex.: abra o menu Iniciar'),
+                ),
+                const SizedBox(height: 10),
+                Row(children: [
+                  ElevatedButton(
+                      onPressed: _rodando ? null : _enviar,
+                      child: const Text('Enviar')),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                      onPressed: _rodando ? () => _agent?.parar() : null,
+                      style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.redAccent),
+                      child: const Text('PARAR')),
+                  const SizedBox(width: 12),
+                  Expanded(child: Text(_faseTexto(fase))),
+                ]),
+                const SizedBox(height: 10),
+                const Text('Agente ao vivo',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 4),
+                _caixaPassos(),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: _rodando ? null : () => Navigator.of(context).pop(),
+              child: const Text('Fechar'))
+        ],
+      ),
+    );
   }
 }

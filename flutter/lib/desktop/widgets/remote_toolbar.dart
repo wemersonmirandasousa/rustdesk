@@ -3009,7 +3009,7 @@ class _AgentMenu extends StatelessWidget {
       onPressed: () => showDialog(
           context: context,
           barrierDismissible: false,
-          builder: (_) => _AgentPanelDialog(ffi: ffi)),
+          builder: (_) => AgentPanel(sessionId: ffi.sessionId)),
       color: _ToolbarTheme.blueColor,
       hoverColor: _ToolbarTheme.hoverBlueColor,
     );
