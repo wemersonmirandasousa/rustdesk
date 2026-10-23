@@ -404,6 +404,10 @@ class _GeneralState extends State<_General> {
   final GlobalKey _minToolbarOptionKey = GlobalKey();
   final TextEditingController _agentKeyCtrl = TextEditingController(
       text: bind.mainGetLocalOption(key: kOptionAgentApiKey));
+  final TextEditingController _agentExecUrlCtrl = TextEditingController(
+      text: bind.mainGetLocalOption(key: kOptionAgentExecutorUrl));
+  final TextEditingController _agentExecTokenCtrl = TextEditingController(
+      text: bind.mainGetLocalOption(key: kOptionAgentExecutorToken));
 
   @override
   Widget build(BuildContext context) {
@@ -470,6 +474,33 @@ class _GeneralState extends State<_General> {
                 );
               }),
             ]),
+            SizedBox(height: 12),
+            Text(
+                'Executor (opcional): deixa o agente rodar comandos no PC '
+                'conectado (diagnostico, servicos, arquivos). Sem ele, o agente '
+                'so ve e clica na tela.',
+                style: TextStyle(fontSize: 12)),
+            SizedBox(height: 8),
+            TextField(
+              controller: _agentExecUrlCtrl,
+              decoration: InputDecoration(
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                  labelText: 'URL do Executor (ex.: http://127.0.0.1:8765)'),
+              onChanged: (v) => bind.mainSetLocalOption(
+                  key: kOptionAgentExecutorUrl, value: v.trim()),
+            ),
+            SizedBox(height: 8),
+            TextField(
+              controller: _agentExecTokenCtrl,
+              obscureText: true,
+              decoration: InputDecoration(
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                  labelText: 'Token do Executor'),
+              onChanged: (v) => bind.mainSetLocalOption(
+                  key: kOptionAgentExecutorToken, value: v.trim()),
+            ),
           ],
         ),
       ),

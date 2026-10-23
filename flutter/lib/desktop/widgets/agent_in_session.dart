@@ -10,6 +10,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
@@ -70,12 +71,23 @@ class AgentInSession extends ChangeNotifier {
       {required this.sessionId,
       required this.apiKey,
       required this.modelo,
-      required this.pedirAprovacao});
+      required this.pedirAprovacao,
+      this.executorUrl = '',
+      this.executorToken = ''});
 
   final SessionID sessionId;
   final String apiKey;
   final String modelo;
   final PedirAprovacao pedirAprovacao;
+  final String executorUrl;
+  final String executorToken;
+
+  static final _perigo = RegExp(
+      r'(\bRemove-Item\b|\bRemove-ItemProperty\b|\brm\b|\bdel\b|\brd\b|\brmdir\b|'
+      r'\bClear-Content\b|\bClear-Disk\b|\bClear-RecycleBin\b|\bFormat-Volume\b|'
+      r'\bStop-Process\b|\btaskkill\b|\bshutdown\b|\bRestart-Computer\b|\breg\s+delete\b|'
+      r'\bUninstall-|\bSet-ExecutionPolicy\b|\bdiskpart\b)',
+      caseSensitive: false);
 
   final List<AgentStep> passos = [];
   AgentFase fase = AgentFase.parado;
@@ -103,8 +115,29 @@ class AgentInSession extends ChangeNotifier {
     notifyListeners();
   }
 
+  bool get temExecutor => executorUrl.trim().isNotEmpty;
+
   // ---- ferramentas que a IA pode chamar (estilo DIY, robusto a versao da API) ----
   List<Map<String, dynamic>> _ferramentas() => [
+        if (temExecutor)
+          {
+            'name': 'comando',
+            'description':
+                'Roda um comando PowerShell NO computador conectado (o remoto) e devolve a '
+                    'saida (stdout/stderr/exit). Use para DIAGNOSTICAR e AGIR no sistema: '
+                    'processos, CPU/memoria/disco, servicos, rede, arquivos/pastas, programas, '
+                    'janelas. PREFIRA isto a clicar quando der por comando.',
+            'input_schema': {
+              'type': 'object',
+              'properties': {
+                'comando': {
+                  'type': 'string',
+                  'description': 'O comando PowerShell a executar no PC conectado.'
+                }
+              },
+              'required': ['comando']
+            },
+          },
         {
           'name': 'tirar_print',
           'description':
@@ -163,18 +196,25 @@ class AgentInSession extends ChangeNotifier {
       'CORRIJA a posicao em vez de repetir no mesmo lugar. Para trazer a janela certa '
       'para frente antes de agir, use a ferramenta tecla (ex.: alt+tab, ou win para o '
       'menu Iniciar). Explique em 1 linha antes de cada acao. Peca o minimo de acoes. '
+      '${temExecutor ? 'Voce TAMBEM tem a ferramenta comando: PowerShell direto no PC '
+          'conectado. PREFIRA comando para diagnosticar e agir no sistema (processos, '
+          'servicos, disco, rede, arquivos, programas, listar/trazer janelas) - e mais '
+          'confiavel que clicar; use a tela so quando nao der por comando. ' : ''}'
       'Ao terminar, responda um resumo curto comecando com "PRONTO:".';
 
-  Future<void> executar(String tarefa) async {
+  Future<void> executar(String tarefa,
+      {List<Map<String, dynamic>> anexos = const []}) async {
     _parar = false;
     passos.clear();
     _setFase(AgentFase.pensando);
     _log('Tarefa: $tarefa');
+    if (anexos.isNotEmpty) _log('(${anexos.length} imagem(ns) anexada(s) de contexto)');
 
     final mensagens = <Map<String, dynamic>>[
       {
         'role': 'user',
         'content': [
+          ...anexos,
           {'type': 'text', 'text': tarefa}
         ]
       }
@@ -237,8 +277,82 @@ class AgentInSession extends ChangeNotifier {
     }
   }
 
+  // ---- MODO MONITOR: observa o remoto em ciclos e so AVISA (nao age) ----
+  Future<void> monitorar(String foco, {int intervaloSeg = 20}) async {
+    _parar = false;
+    passos.clear();
+    _setFase(AgentFase.pensando);
+    _log('MONITORANDO: ${foco.isEmpty ? 'a tela' : foco} '
+        '(a cada ${intervaloSeg}s). PARAR encerra.', destaque: true);
+    final mensagens = <Map<String, dynamic>>[];
+    try {
+      while (!_parar) {
+        _setFase(AgentFase.agindo);
+        final img = await _print();
+        if (_parar) break;
+        mensagens.add({
+          'role': 'user',
+          'content': [
+            ...img,
+            {
+              'type': 'text',
+              'text':
+                  'Voce MONITORA o PC conectado (nao aja, so observe). Foco: '
+                      '"${foco.isEmpty ? 'estado geral da tela' : foco}". Olhe o print e '
+                      'responda em 1-2 linhas: o estado atual e se mudou algo relevante '
+                      'desde o ultimo ciclo. Se exigir atencao/acao humana, COMECE com '
+                      '"ATENCAO:". Caso contrario, comece com "ok:".'
+            }
+          ]
+        });
+        _setFase(AgentFase.pensando);
+        final resp = await _chamarIA(mensagens);
+        if (resp == null) {
+          _setFase(AgentFase.erro);
+          return;
+        }
+        final content = (resp['content'] as List?) ?? [];
+        mensagens.add({'role': 'assistant', 'content': content});
+        for (final b in content) {
+          if (b is Map && b['type'] == 'text') {
+            final t = (b['text'] ?? '').toString().trim();
+            if (t.isNotEmpty) {
+              _log(t, destaque: t.toUpperCase().startsWith('ATENCAO'));
+            }
+          }
+        }
+        if (mensagens.length > 8) {
+          mensagens.removeRange(0, mensagens.length - 8);
+        }
+        if (_parar) break;
+        _setFase(AgentFase.agindo);
+        for (var s = 0; s < intervaloSeg && !_parar; s++) {
+          await Future.delayed(const Duration(seconds: 1));
+        }
+      }
+    } catch (e) {
+      _log('ERRO no monitor: $e', destaque: true);
+    }
+    _setFase(AgentFase.parado);
+    _log('Monitoramento encerrado.', destaque: true);
+  }
+
   Future<dynamic> _executarFerramenta(String? nome, Map entrada) async {
     switch (nome) {
+      case 'comando':
+        final cmd = (entrada['comando'] ?? '').toString();
+        if (!temExecutor) {
+          return 'Executor nao configurado (Config. > Agente). Sem ele nao da pra '
+              'rodar comando no PC conectado; use clicar/digitar na tela.';
+        }
+        if (_perigo.hasMatch(cmd)) {
+          final ok = await _aprovar('rodar no PC conectado: $cmd');
+          if (!ok) return 'Usuario NEGOU o comando.';
+        } else {
+          _setFase(AgentFase.agindo);
+        }
+        _log('[comando] $cmd');
+        return await _rodarComando(cmd);
       case 'tirar_print':
         _setFase(AgentFase.agindo);
         return await _print();
@@ -379,6 +493,27 @@ class AgentInSession extends ChangeNotifier {
     }
   }
 
+  // ---- AGIR no sistema: PowerShell no remoto pelo executor (tunel) ----
+  Future<String> _rodarComando(String cmd) async {
+    try {
+      final base = executorUrl.trim().replaceAll(RegExp(r'/+$'), '');
+      final r = await http
+          .post(Uri.parse('$base/cmd'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({'token': executorToken, 'comando': cmd}))
+          .timeout(const Duration(seconds: 120));
+      if (r.statusCode != 200) {
+        return 'ERRO do executor (${r.statusCode}): '
+            '${r.body.substring(0, r.body.length > 300 ? 300 : r.body.length)}';
+      }
+      final d = jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
+      final saida = (d['saida'] ?? d['output'] ?? '').toString();
+      return 'exit=${d['exit'] ?? d['code'] ?? '?'}\n$saida';
+    } catch (e) {
+      return 'ERRO ao falar com o executor ($executorUrl): $e';
+    }
+  }
+
   // ---- IA: Claude Messages API direto do app ----
   Future<Map<String, dynamic>?> _chamarIA(
       List<Map<String, dynamic>> mensagens) async {
@@ -427,6 +562,9 @@ class _AgentPanelState extends State<AgentPanel> {
   final _tarefaCtrl = TextEditingController();
   final _scroll = ScrollController();
   AgentInSession? _agent;
+  String _executorUrl = '';
+  String _executorToken = '';
+  final List<Map<String, dynamic>> _anexos = [];
 
   @override
   void initState() {
@@ -436,6 +574,8 @@ class _AgentPanelState extends State<AgentPanel> {
       if (k.isNotEmpty) _keyCtrl.text = k;
       final m = bind.mainGetLocalOption(key: kOptionAgentModelo);
       if (m.isNotEmpty) _modeloCtrl.text = m;
+      _executorUrl = bind.mainGetLocalOption(key: kOptionAgentExecutorUrl);
+      _executorToken = bind.mainGetLocalOption(key: kOptionAgentExecutorToken);
     } catch (_) {}
   }
 
@@ -480,10 +620,9 @@ class _AgentPanelState extends State<AgentPanel> {
     return ok ?? false;
   }
 
-  void _enviar() {
-    final tarefa = _tarefaCtrl.text.trim();
+  AgentInSession? _criarAgente() {
     final key = _keyCtrl.text.trim();
-    if (tarefa.isEmpty || key.isEmpty || _rodando) return;
+    if (key.isEmpty || _rodando) return null;
     try {
       bind.mainSetLocalOption(key: kOptionAgentApiKey, value: key);
       bind.mainSetLocalOption(
@@ -497,10 +636,58 @@ class _AgentPanelState extends State<AgentPanel> {
           ? 'claude-sonnet-5-5'
           : _modeloCtrl.text.trim(),
       pedirAprovacao: _pedirAprovacao,
+      executorUrl: _executorUrl,
+      executorToken: _executorToken,
     );
     agent.addListener(_onAgent);
     setState(() => _agent = agent);
-    agent.executar(tarefa);
+    return agent;
+  }
+
+  void _enviar() {
+    final tarefa = _tarefaCtrl.text.trim();
+    if (tarefa.isEmpty) return;
+    final agent = _criarAgente();
+    if (agent == null) return;
+    final anexos = List<Map<String, dynamic>>.from(_anexos);
+    setState(_anexos.clear);
+    agent.executar(tarefa, anexos: anexos);
+  }
+
+  void _monitorar() {
+    final agent = _criarAgente();
+    if (agent == null) return;
+    agent.monitorar(_tarefaCtrl.text.trim());
+  }
+
+  Future<void> _anexarImagem() async {
+    try {
+      final res = await FilePicker.platform
+          .pickFiles(type: FileType.image, withData: true);
+      if (res == null || res.files.isEmpty) return;
+      final f = res.files.first;
+      final bytes = f.bytes ??
+          (f.path != null ? await File(f.path!).readAsBytes() : null);
+      if (bytes == null) return;
+      final ext = (f.extension ?? 'png').toLowerCase();
+      final media = (ext == 'jpg' || ext == 'jpeg')
+          ? 'image/jpeg'
+          : ext == 'webp'
+              ? 'image/webp'
+              : ext == 'gif'
+                  ? 'image/gif'
+                  : 'image/png';
+      setState(() {
+        _anexos.add({
+          'type': 'image',
+          'source': {
+            'type': 'base64',
+            'media_type': media,
+            'data': base64Encode(bytes)
+          },
+        });
+      });
+    } catch (_) {}
   }
 
   String _faseTexto(AgentFase f) {
@@ -588,6 +775,26 @@ class _AgentPanelState extends State<AgentPanel> {
                   controller: _modeloCtrl,
                   decoration: const InputDecoration(labelText: 'Modelo'),
                 ),
+                const SizedBox(height: 6),
+                Row(children: [
+                  Icon(
+                      _executorUrl.trim().isEmpty
+                          ? Icons.terminal_outlined
+                          : Icons.terminal,
+                      size: 16,
+                      color: _executorUrl.trim().isEmpty
+                          ? Colors.grey
+                          : Colors.greenAccent),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      _executorUrl.trim().isEmpty
+                          ? 'Executor: nao configurado (so ve/clica na tela)'
+                          : 'Executor: ativo (PowerShell no PC conectado)',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ),
+                ]),
                 const SizedBox(height: 8),
                 TextField(
                   controller: _tarefaCtrl,
@@ -598,19 +805,28 @@ class _AgentPanelState extends State<AgentPanel> {
                       labelText: 'Tarefa', hintText: 'ex.: abra o menu Iniciar'),
                 ),
                 const SizedBox(height: 10),
-                Row(children: [
+                Wrap(spacing: 8, runSpacing: 6, children: [
                   ElevatedButton(
                       onPressed: _rodando ? null : _enviar,
                       child: const Text('Enviar')),
-                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                      onPressed: _rodando ? null : _monitorar,
+                      icon: const Icon(Icons.visibility_outlined, size: 16),
+                      label: const Text('Monitorar')),
+                  OutlinedButton.icon(
+                      onPressed: _rodando ? null : _anexarImagem,
+                      icon: const Icon(Icons.image_outlined, size: 16),
+                      label: Text(_anexos.isEmpty
+                          ? 'Anexar imagem'
+                          : 'Imagem (${_anexos.length})')),
                   ElevatedButton(
                       onPressed: _rodando ? () => _agent?.parar() : null,
                       style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.redAccent),
                       child: const Text('PARAR')),
-                  const SizedBox(width: 12),
-                  Expanded(child: Text(_faseTexto(fase))),
                 ]),
+                const SizedBox(height: 6),
+                Text(_faseTexto(fase)),
                 const SizedBox(height: 10),
                 const Text('Agente ao vivo',
                     style: TextStyle(fontWeight: FontWeight.bold)),
