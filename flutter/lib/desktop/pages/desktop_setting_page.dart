@@ -402,6 +402,8 @@ class _GeneralState extends State<_General> {
       isWeb ? RxBool(false) : Get.find<RxBool>(tag: 'stop-service');
   RxBool serviceBtnEnabled = true.obs;
   final GlobalKey _minToolbarOptionKey = GlobalKey();
+  final TextEditingController _agentKeyCtrl = TextEditingController(
+      text: bind.mainGetLocalOption(key: kOptionAgentApiKey));
 
   @override
   Widget build(BuildContext context) {
@@ -411,6 +413,7 @@ class _GeneralState extends State<_General> {
       children: [
         if (!isWeb) service(),
         theme(),
+        agente(),
         _Card(title: 'Language', children: [language()]),
         if (!isWeb) hwcodec(),
         if (!isWeb) audio(context),
@@ -419,6 +422,58 @@ class _GeneralState extends State<_General> {
         other()
       ],
     ).marginOnly(bottom: _kListViewBottomMargin);
+  }
+
+  Widget agente() {
+    return _Card(title: 'Agente (IA)', children: [
+      Padding(
+        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+                'Chave da API do agente (Anthropic) e modelo. Fica salva neste '
+                'computador e e usada pelo botao Agente dentro da sessao remota.'),
+            SizedBox(height: 8),
+            TextField(
+              controller: _agentKeyCtrl,
+              obscureText: true,
+              decoration: InputDecoration(
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                  labelText: 'Chave da IA (Anthropic)'),
+              onChanged: (v) => bind.mainSetLocalOption(
+                  key: kOptionAgentApiKey, value: v.trim()),
+            ),
+            SizedBox(height: 12),
+            Row(children: [
+              Text('Modelo:  '),
+              Builder(builder: (context) {
+                const keys = [
+                  'claude-opus-5-5',
+                  'claude-sonnet-5-5',
+                  'claude-haiku-5-5'
+                ];
+                const values = [
+                  'Opus 5.5 (mais capaz)',
+                  'Sonnet 5.5 (equilibrado)',
+                  'Haiku 5.5 (rapido/barato)'
+                ];
+                var cur = bind.mainGetLocalOption(key: kOptionAgentModelo);
+                if (!keys.contains(cur)) cur = 'claude-sonnet-5-5';
+                return ComboBox(
+                  keys: keys,
+                  values: values,
+                  initialKey: cur,
+                  onChanged: (key) => bind.mainSetLocalOption(
+                      key: kOptionAgentModelo, value: key),
+                );
+              }),
+            ]),
+          ],
+        ),
+      ),
+    ]);
   }
 
   Widget theme() {

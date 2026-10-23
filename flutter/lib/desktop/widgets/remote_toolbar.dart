@@ -3,6 +3,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_hbb/desktop/widgets/agent_in_session.dart';
 import 'package:flutter_hbb/common/widgets/audio_input.dart';
 import 'package:flutter_hbb/common/widgets/dialog.dart';
 import 'package:flutter_hbb/common/widgets/toolbar.dart';
@@ -850,6 +851,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
       toolbarItems.add(_VoiceCallMenu(id: widget.id, ffi: widget.ffi));
     }
     if (!isWeb) toolbarItems.add(_RecordMenu());
+    if (!isWeb) toolbarItems.add(_AgentMenu(ffi: widget.ffi));
     toolbarItems.add(_CloseMenu(id: widget.id, ffi: widget.ffi));
     final toolbarBorderRadius = BorderRadius.all(Radius.circular(4.0));
     // innerAxis: how the toolbar icons themselves flow.
@@ -2990,6 +2992,247 @@ class _CloseMenu extends StatelessWidget {
       },
       color: _ToolbarTheme.redColor,
       hoverColor: _ToolbarTheme.hoverRedColor,
+    );
+  }
+}
+
+class _AgentMenu extends StatelessWidget {
+  final FFI ffi;
+  const _AgentMenu({Key? key, required this.ffi}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return _IconMenuButton(
+      icon: Icon(Icons.smart_toy_outlined,
+          color: Colors.white, size: _ToolbarTheme.buttonSize - 8),
+      tooltip: 'Agente',
+      onPressed: () => showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => _AgentPanelDialog(ffi: ffi)),
+      color: _ToolbarTheme.blueColor,
+      hoverColor: _ToolbarTheme.hoverBlueColor,
+    );
+  }
+}
+
+class _AgentPanelDialog extends StatefulWidget {
+  final FFI ffi;
+  _AgentPanelDialog({Key? key, required this.ffi}) : super(key: key);
+
+  @override
+  State<_AgentPanelDialog> createState() => _AgentPanelDialogState();
+}
+
+class _AgentPanelDialogState extends State<_AgentPanelDialog> {
+  final _keyCtrl = TextEditingController();
+  final _modeloCtrl = TextEditingController(text: 'claude-sonnet-5-5');
+  final _tarefaCtrl = TextEditingController();
+  final _scroll = ScrollController();
+  AgentInSession? _agent;
+
+  @override
+  void initState() {
+    super.initState();
+    try {
+      final k = bind.mainGetLocalOption(key: kOptionAgentApiKey);
+      if (k.isNotEmpty) _keyCtrl.text = k;
+      final m = bind.mainGetLocalOption(key: kOptionAgentModelo);
+      if (m.isNotEmpty) _modeloCtrl.text = m;
+    } catch (_) {}
+  }
+
+  @override
+  void dispose() {
+    _agent?.removeListener(_onAgent);
+    _agent?.parar();
+    _keyCtrl.dispose();
+    _modeloCtrl.dispose();
+    _tarefaCtrl.dispose();
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  bool get _rodando =>
+      _agent != null &&
+      (_agent!.fase == AgentFase.pensando ||
+          _agent!.fase == AgentFase.agindo ||
+          _agent!.fase == AgentFase.aprovando);
+
+  void _onAgent() {
+    if (mounted) setState(() {});
+  }
+
+  Future<bool> _pedirAprovacao(String desc) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        title: Text('Aprovar acao no computador conectado'),
+        content: Text(desc),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text('Negar')),
+          ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text('Aprovar')),
+        ],
+      ),
+    );
+    return ok ?? false;
+  }
+
+  void _enviar() {
+    final tarefa = _tarefaCtrl.text.trim();
+    final key = _keyCtrl.text.trim();
+    if (tarefa.isEmpty || key.isEmpty || _rodando) return;
+    try {
+      bind.mainSetLocalOption(key: kOptionAgentApiKey, value: key);
+      bind.mainSetLocalOption(
+          key: kOptionAgentModelo, value: _modeloCtrl.text.trim());
+    } catch (_) {}
+    _agent?.removeListener(_onAgent);
+    final agent = AgentInSession(
+      sessionId: widget.ffi.sessionId,
+      apiKey: key,
+      modelo: _modeloCtrl.text.trim().isEmpty
+          ? 'claude-sonnet-5-5'
+          : _modeloCtrl.text.trim(),
+      pedirAprovacao: _pedirAprovacao,
+    );
+    agent.addListener(_onAgent);
+    setState(() => _agent = agent);
+    agent.executar(tarefa);
+  }
+
+  String _faseTexto(AgentFase f) {
+    switch (f) {
+      case AgentFase.pensando:
+        return 'pensando...';
+      case AgentFase.aprovando:
+        return 'aguardando sua aprovacao...';
+      case AgentFase.agindo:
+        return 'agindo no computador conectado...';
+      case AgentFase.feito:
+        return 'concluido';
+      case AgentFase.erro:
+        return 'erro';
+      case AgentFase.parado:
+        return '';
+    }
+  }
+
+  Widget _caixaPassos() {
+    final passos = _agent?.passos ?? const <AgentStep>[];
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scroll.hasClients) {
+        _scroll.jumpTo(_scroll.position.maxScrollExtent);
+      }
+    });
+    return Container(
+      width: double.infinity,
+      height: 230,
+      padding: EdgeInsets.all(8),
+      decoration: BoxDecoration(
+          color: Colors.black26, borderRadius: BorderRadius.circular(6)),
+      child: passos.isEmpty
+          ? Text('(sem atividade ainda)',
+              style: TextStyle(fontFamily: 'monospace', fontSize: 12))
+          : ListView.builder(
+              controller: _scroll,
+              itemCount: passos.length,
+              itemBuilder: (_, i) => Padding(
+                    padding: EdgeInsets.symmetric(vertical: 1),
+                    child: Text(passos[i].texto,
+                        style: TextStyle(
+                            fontFamily: 'monospace',
+                            fontSize: 12,
+                            fontWeight: passos[i].destaque
+                                ? FontWeight.bold
+                                : FontWeight.normal)),
+                  )),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final fase = _agent?.fase ?? AgentFase.parado;
+    return PopScope(
+      canPop: !_rodando,
+      child: AlertDialog(
+        title: Row(children: [
+          Icon(Icons.smart_toy_outlined, size: 20),
+          SizedBox(width: 8),
+          Text('Agente (dentro do DABLIU DESK)'),
+        ]),
+        content: SizedBox(
+          width: 560,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                    'O agente age NO computador conectado, pela propria sessao: '
+                    've a tela, clica e digita nele, em tempo real. Cada acao '
+                    'pede sua aprovacao. PARAR interrompe.'),
+                SizedBox(height: 8),
+                Row(children: [
+                  Expanded(
+                      child: TextField(
+                          enabled: !_rodando,
+                          obscureText: true,
+                          controller: _keyCtrl,
+                          decoration: InputDecoration(
+                              labelText: 'Chave da IA (ou defina nas Config.)'))),
+                  SizedBox(width: 8),
+                  SizedBox(
+                      width: 170,
+                      child: TextField(
+                          enabled: !_rodando,
+                          controller: _modeloCtrl,
+                          decoration: InputDecoration(labelText: 'Modelo'))),
+                ]),
+                SizedBox(height: 8),
+                TextField(
+                    controller: _tarefaCtrl,
+                    enabled: !_rodando,
+                    minLines: 2,
+                    maxLines: 4,
+                    decoration: InputDecoration(
+                        labelText: 'Tarefa',
+                        hintText:
+                            'ex.: abra o menu Iniciar e veja o uso de disco')),
+                SizedBox(height: 10),
+                Row(children: [
+                  ElevatedButton(
+                      onPressed: _rodando ? null : _enviar,
+                      child: Text('Enviar')),
+                  SizedBox(width: 8),
+                  ElevatedButton(
+                      onPressed: _rodando ? () => _agent?.parar() : null,
+                      style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.redAccent),
+                      child: Text('PARAR')),
+                  SizedBox(width: 12),
+                  Expanded(child: Text(_faseTexto(fase))),
+                ]),
+                SizedBox(height: 10),
+                Text('Agente ao vivo',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                SizedBox(height: 4),
+                _caixaPassos(),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: _rodando ? null : () => Navigator.of(context).pop(),
+              child: Text('Fechar'))
+        ],
+      ),
     );
   }
 }

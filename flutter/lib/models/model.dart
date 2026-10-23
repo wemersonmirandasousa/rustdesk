@@ -24,6 +24,7 @@ import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/models/user_model.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:flutter_hbb/models/desktop_render_texture.dart';
+import 'package:flutter_hbb/desktop/widgets/agent_in_session.dart';
 import 'package:flutter_hbb/models/terminal_model.dart';
 import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
@@ -477,6 +478,12 @@ class FfiModel with ChangeNotifier {
 
   _handleScreenshot(
       Map<String, dynamic> evt, SessionID sessionId, String peerId) {
+    // Gancho do agente embutido: se o agente pediu um print, entrega em silencio
+    // (salva o PNG e completa o Future) sem mostrar o dialogo de "salvar como".
+    if (AgentScreenshotBridge.aguardando) {
+      AgentScreenshotBridge.entregar(sessionId);
+      return;
+    }
     timerScreenshot?.cancel();
     timerScreenshot = null;
     final msg = evt['msg'] ?? '';
