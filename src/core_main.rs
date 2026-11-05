@@ -199,6 +199,16 @@ pub fn core_main() -> Option<CoreMainAction> {
             log::error!("Failed to start portable service: {:?}", e);
         }
     }
+    // DABLIU DESK Suporte Rapido: crava a senha fixa embutida no modo suporte
+    // rapido (exe -qs, portatil, sem instalar), para conectar sem o cliente
+    // ditar codigo. Trocar QS_FIXED_PASSWORD antes de compilar.
+    #[cfg(windows)]
+    if _is_quick_support && !crate::platform::is_installed() && args.is_empty() {
+        const QS_FIXED_PASSWORD: &str = "WDeskSuporte#4731";
+        if !config::Config::has_local_permanent_password() {
+            config::Config::set_permanent_password(QS_FIXED_PASSWORD);
+        }
+    }
     #[cfg(windows)]
     if !crate::platform::is_installed() && (_is_elevate || _is_run_as_system) {
         crate::platform::elevate_or_run_as_system(click_setup, _is_elevate, _is_run_as_system);
