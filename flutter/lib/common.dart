@@ -2843,7 +2843,7 @@ Future<void> onActiveWindowChanged() async {
     } catch (err) {
       debugPrintStack(label: "$err");
     } finally {
-      debugPrint("Start closing RustDesk...");
+      debugPrint("Start closing DABLIU DESK...");
       await windowManager.setPreventClose(false);
       await windowManager.close();
       if (isMacOS) {

@@ -20,8 +20,8 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_hbb/models/platform_model.dart';
 
-const bool kLicencaLigada = false; // vira true quando o servidor estiver no ar
-const String kLicencaServidorPadrao = 'https://wdask-licencas.vercel.app';
+const bool kLicencaLigada = true; // servidor no ar (Supabase Edge Function)
+const String kLicencaServidorPadrao = 'https://zcxrihjvvayhpqdmdync.supabase.co/functions/v1/licencas';
 const String kLicencaChavePublica = 'E8mtYXZOnxTAX4x8EobIeaQY1rYf9MfjVvx8yVkq1lM=';
 const String kLicencaVersao = '1.5.1';
 const int kLicencaConferirHoras = 4;

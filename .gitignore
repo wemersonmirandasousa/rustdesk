@@ -58,3 +58,7 @@ libsciter.dylib
 flutter/web/
 # libdrmtap is cloned at build time by build.py (not a submodule)
 /third_party/libdrmtap/
+
+# keystore de assinatura (NUNCA publicar)
+flutter/android/app/*.jks
+flutter/android/app/dabliudesk.jks

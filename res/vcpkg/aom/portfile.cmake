@@ -37,6 +37,11 @@ if(VCPKG_TARGET_IS_UWP OR (VCPKG_TARGET_IS_WINDOWS AND VCPKG_TARGET_ARCHITECTURE
     set(aom_target_cpu "-DAOM_TARGET_CPU=generic")
 endif()
 
+if(VCPKG_CMAKE_SYSTEM_NAME STREQUAL "Android")
+    # Host Windows nao tem o assembler 'as'; build generico (sem asm arm) pra o configure passar.
+    set(aom_target_cpu "-DAOM_TARGET_CPU=generic")
+endif()
+
 if(VCPKG_TARGET_ARCHITECTURE STREQUAL "arm" AND VCPKG_TARGET_IS_LINUX)
   set(aom_target_cpu "-DENABLE_NEON=OFF")
 endif()
