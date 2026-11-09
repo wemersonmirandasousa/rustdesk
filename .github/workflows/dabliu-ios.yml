@@ -96,7 +96,7 @@ jobs:
       - name: Compilar lib Rust (aarch64-apple-ios)
         run: |
           rustup target add aarch64-apple-ios
-          cargo build --locked --features flutter,hwcodec --release --target aarch64-apple-ios --lib
+          cargo build --locked --features flutter --release --target aarch64-apple-ios --lib
 
       - name: Compilar app e empacotar ipa (sem assinatura)
         shell: bash
