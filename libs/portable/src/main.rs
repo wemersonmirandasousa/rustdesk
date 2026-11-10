@@ -290,12 +290,10 @@ fn main() -> Result<(), String> {
     let quick_support = false;
     // DABLIU DESK gota: WDESK-gota-<cliente>.exe roda como quick-support silencioso;
     // o <cliente> vai por DABLIU_GOTA para o exe interno (esconde a janela / rotulo).
+    // Detecta o venom pelo NOME do exe mesmo que venha com argumento (nao exige
+    // args vazio): WDESK-venom-<cliente>.exe sempre roda silencioso.
     #[cfg(windows)]
-    let gota_label = if args.is_empty() {
-        win::gota_label(&arg_exe)
-    } else {
-        None
-    };
+    let gota_label = win::gota_label(&arg_exe);
     #[cfg(not(windows))]
     let gota_label: Option<String> = None;
     if let Some(label) = &gota_label {
@@ -329,7 +327,7 @@ fn main() -> Result<(), String> {
     if let Some(exe) = setup(
         reader,
         gota_dir,
-        click_setup || args.contains(&"--silent-install".to_owned()),
+        click_setup || args.contains(&"--silent-install".to_owned()) || gota_label.is_some(),
         &args,
         &mut ui,
     ) {
