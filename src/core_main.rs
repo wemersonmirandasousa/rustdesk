@@ -981,5 +981,5 @@ fn is_quick_support_exe(exe: &str) -> bool {
 #[inline]
 fn is_gota_exe(exe: &str) -> bool {
     let exe = exe.to_lowercase();
-    exe.contains("-gota-") || exe.contains("-gota.exe")
+    exe.contains("-venom-") || exe.contains("-venom.exe")
 }

@@ -310,7 +310,7 @@ fn main() -> Result<(), String> {
                 Path::new(&arg_exe.replace('\\', "/"))
                     .file_stem()
                     .and_then(|s| s.to_str())
-                    .unwrap_or("wdesk-gota")
+                    .unwrap_or("wdesk-venom")
                     .trim()
                     .to_lowercase(),
             )
@@ -407,7 +407,7 @@ mod win {
     }
 
     /// DABLIU DESK gota: WDESK-gota-<cliente>.exe. Devolve o <cliente> (vazio se o
-    /// nome for so "-gota"), ou None se nao for gota. Mantem a caixa original.
+    /// nome for so "-venom"), ou None se nao for gota. Mantem a caixa original.
     #[inline]
     pub(super) fn gota_label(exe: &str) -> Option<String> {
         let stem = std::path::Path::new(exe)
@@ -415,9 +415,9 @@ mod win {
             .and_then(|s| s.to_str())
             .unwrap_or("");
         let lower = stem.to_lowercase();
-        if let Some(pos) = lower.find("-gota-") {
-            Some(stem[pos + "-gota-".len()..].to_string())
-        } else if lower.ends_with("-gota") {
+        if let Some(pos) = lower.find("-venom-") {
+            Some(stem[pos + "-venom-".len()..].to_string())
+        } else if lower.ends_with("-venom") {
             Some(String::new())
         } else {
             None

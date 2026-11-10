@@ -162,7 +162,7 @@ void runMainApp(bool startService) async {
     // DABLIU DESK: a "gota" (WDESK-gota-<cliente>.exe) roda sem janela nenhuma;
     // o servico de acesso sobe igual, so a tela fica oculta.
     final ehGota = Platform.environment.containsKey('DABLIU_GOTA') ||
-        Platform.resolvedExecutable.toLowerCase().contains('-gota');
+        Platform.resolvedExecutable.toLowerCase().contains('-venom');
     final handledUri = handledByUniLinks || handleUriLink(cmdArgs: kBootArgs);
     if (ehGota || handledUri) {
       windowManager.hide();
