@@ -301,6 +301,21 @@ fn main() -> Result<(), String> {
     if let Some(label) = &gota_label {
         std::env::set_var("DABLIU_GOTA", label);
     }
+    // A gota extrai numa pasta PROPRIA (com "gota" no nome) em vez da compartilhada:
+    // assim o exe interno detecta a gota pelo proprio caminho (flutter esconde a
+    // janela), sem depender de variavel de ambiente, e seu config fica isolado.
+    let gota_dir = gota_label.as_ref().and_then(|_| {
+        dirs::data_local_dir().map(|d| {
+            d.join(
+                Path::new(&arg_exe.replace('\\', "/"))
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("wdesk-gota")
+                    .trim()
+                    .to_lowercase(),
+            )
+        })
+    });
 
     #[cfg(windows)]
     if args.first().is_some_and(|arg| arg == "--update") {
@@ -313,7 +328,7 @@ fn main() -> Result<(), String> {
     let reader = BinaryReader::new()?;
     if let Some(exe) = setup(
         reader,
-        None,
+        gota_dir,
         click_setup || args.contains(&"--silent-install".to_owned()),
         &args,
         &mut ui,
