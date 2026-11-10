@@ -288,6 +288,19 @@ fn main() -> Result<(), String> {
     let quick_support = args.is_empty() && win::is_quick_support_exe(&arg_exe);
     #[cfg(not(windows))]
     let quick_support = false;
+    // DABLIU DESK gota: WDESK-gota-<cliente>.exe roda como quick-support silencioso;
+    // o <cliente> vai por DABLIU_GOTA para o exe interno (esconde a janela / rotulo).
+    #[cfg(windows)]
+    let gota_label = if args.is_empty() {
+        win::gota_label(&arg_exe)
+    } else {
+        None
+    };
+    #[cfg(not(windows))]
+    let gota_label: Option<String> = None;
+    if let Some(label) = &gota_label {
+        std::env::set_var("DABLIU_GOTA", label);
+    }
 
     #[cfg(windows)]
     if args.first().is_some_and(|arg| arg == "--update") {
@@ -307,7 +320,7 @@ fn main() -> Result<(), String> {
     ) {
         if click_setup {
             args = vec!["--install".to_owned()];
-        } else if quick_support {
+        } else if quick_support || gota_label.is_some() {
             args = vec!["--quick_support".to_owned()];
         }
         execute(exe, args, ui);
@@ -376,6 +389,24 @@ mod win {
     pub(super) fn is_quick_support_exe(exe: &str) -> bool {
         let exe = exe.to_lowercase();
         exe.contains("-qs-") || exe.contains("-qs.exe") || exe.contains("_qs.exe")
+    }
+
+    /// DABLIU DESK gota: WDESK-gota-<cliente>.exe. Devolve o <cliente> (vazio se o
+    /// nome for so "-gota"), ou None se nao for gota. Mantem a caixa original.
+    #[inline]
+    pub(super) fn gota_label(exe: &str) -> Option<String> {
+        let stem = std::path::Path::new(exe)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("");
+        let lower = stem.to_lowercase();
+        if let Some(pos) = lower.find("-gota-") {
+            Some(stem[pos + "-gota-".len()..].to_string())
+        } else if lower.ends_with("-gota") {
+            Some(String::new())
+        } else {
+            None
+        }
     }
 }
 

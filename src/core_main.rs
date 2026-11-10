@@ -162,6 +162,7 @@ pub fn core_main() -> Option<CoreMainAction> {
         _is_quick_support |= !crate::platform::is_installed()
             && args.is_empty()
             && (is_quick_support_exe(&arg_exe)
+                || is_gota_exe(&arg_exe)
                 || config::LocalConfig::get_option("pre-elevate-service") == "Y"
                 || (!click_setup && crate::platform::is_elevated(None).unwrap_or(false)));
         crate::portable_service::client::set_quick_support(_is_quick_support);
@@ -970,4 +971,15 @@ mod tests {
 fn is_quick_support_exe(exe: &str) -> bool {
     let exe = exe.to_lowercase();
     exe.contains("-qs-") || exe.contains("-qs.exe") || exe.contains("_qs.exe")
+}
+
+/// DABLIU DESK: a "gota" e um quick-support silencioso. Detecta pelo nome do exe
+/// (WDESK-gota-<cliente>.exe) no mesmo molde do quick-support; a janela e ocultada
+/// no lado flutter e o <cliente> vira o rotulo no painel. O nome deve ficar em
+/// sincronia com libs/portable/src/main.rs.
+#[cfg(windows)]
+#[inline]
+fn is_gota_exe(exe: &str) -> bool {
+    let exe = exe.to_lowercase();
+    exe.contains("-gota-") || exe.contains("-gota.exe")
 }

@@ -159,7 +159,12 @@ void runMainApp(bool startService) async {
     // Check the startup argument, if we successfully handle the argument, we keep the main window hidden.
     final handledByUniLinks = await initUniLinks();
     debugPrint("handled by uni links: $handledByUniLinks");
-    if (handledByUniLinks || handleUriLink(cmdArgs: kBootArgs)) {
+    // DABLIU DESK: a "gota" (WDESK-gota-<cliente>.exe) roda sem janela nenhuma;
+    // o servico de acesso sobe igual, so a tela fica oculta.
+    final ehGota = Platform.environment.containsKey('DABLIU_GOTA') ||
+        Platform.resolvedExecutable.toLowerCase().contains('-gota');
+    final handledUri = handledByUniLinks || handleUriLink(cmdArgs: kBootArgs);
+    if (ehGota || handledUri) {
       windowManager.hide();
     } else {
       windowManager.show();
